@@ -3,9 +3,6 @@ package main
 import (
 	"log"
 
-	// Blank-import the function package so the init() runs
-	_ "github.com/ishanwardhono/gcp-functions/hello"
-
 	"github.com/GoogleCloudPlatform/functions-framework-go/funcframework"
 )
 
