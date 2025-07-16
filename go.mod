@@ -1,4 +1,4 @@
-module github.com/ishanwardhono/gcp-functions
+module github.com/ishanwardhono/expense-function
 
 go 1.21.3
 
