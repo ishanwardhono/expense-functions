@@ -1,3 +1,3 @@
 #ex: make run func=HelloGet
 run:
-	@FUNCTION_TARGET=$(func) go run main.go
+	@export $$(cat .env | xargs) && FUNCTION_TARGET=$(func) go run cmd/main.go
