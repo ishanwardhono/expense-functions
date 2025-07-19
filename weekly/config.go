@@ -1,42 +1,38 @@
 package weekly
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 )
 
 type config struct {
-	databaseHost     string
-	databasePort     string
-	databaseUser     string
-	databasePassword string
-	databaseName     string
-	databaseTimeout  int
-
-	maxExpense int64
+	maxExpense   int64
+	projectID    string
+	databaseName string
 }
 
-func loadConfig() (*config, error) {
+func loadConfig(ctx context.Context) (*config, error) {
 	maxExpenseStr := os.Getenv("MAX_EXPENSE")
 	maxExpense, err := strconv.ParseInt(maxExpenseStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid MAX_EXPENSE environment variable: %v", err)
 	}
 
-	dbTimeoutStr := os.Getenv("DB_TIMEOUT")
-	dbTimeout, err := strconv.Atoi(dbTimeoutStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid DB_TIMEOUT environment variable: %v", err)
+	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
+	if projectID == "" {
+		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT environment variable is required")
+	}
+
+	databaseName := os.Getenv("FIRESTORE_DATABASE")
+	if databaseName == "" {
+		return nil, fmt.Errorf("FIRESTORE_DATABASE environment variable is required")
 	}
 
 	return &config{
-		databaseHost:     os.Getenv("DB_HOST"),
-		databasePort:     os.Getenv("DB_PORT"),
-		databaseUser:     os.Getenv("DB_USER"),
-		databasePassword: os.Getenv("DB_PASSWORD"),
-		databaseName:     os.Getenv("DB_NAME"),
-		databaseTimeout:  dbTimeout,
-		maxExpense:       maxExpense,
+		maxExpense:   maxExpense,
+		projectID:    projectID,
+		databaseName: databaseName,
 	}, nil
 }

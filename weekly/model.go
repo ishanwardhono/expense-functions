@@ -9,23 +9,23 @@ type WeekData struct {
 }
 
 type WeeklyExpense struct {
-	id          int       `db:"id"`
-	year        int       `db:"year"`
-	week        int       `db:"week"`
-	weekday     int64     `db:"weekday"`
-	weekend     int64     `db:"weekend"`
-	createdTime time.Time `db:"created_time"`
+	Id          string    `firestore:"-"`
+	Year        int       `firestore:"year"`
+	Week        int       `firestore:"week"`
+	Weekday     int64     `firestore:"weekday"`
+	Weekend     int64     `firestore:"weekend"`
+	CreatedTime time.Time `firestore:"created_time"`
 }
 
 type expenseResponse struct {
-	year     int              `json:"year"`
-	week     int              `json:"week"`
-	dayLabel string           `json:"day_label"`
-	remaning expenseRemaining `json:"remaining"`
+	Year      int              `json:"year"`
+	Week      int              `json:"week"`
+	DayLabel  string           `json:"day_label"`
+	Remaining expenseRemaining `json:"remaining"`
 }
 
 type expenseRemaining struct {
-	weekday string   `json:"weekday"`
-	weekend string   `json:"weekend"`
-	days    []string `json:"days"`
+	Weekday string   `json:"weekday"`
+	Weekend string   `json:"weekend"`
+	Days    []string `json:"days"`
 }

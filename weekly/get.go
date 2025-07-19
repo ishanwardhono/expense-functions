@@ -8,12 +8,12 @@ import (
 func Get(ctx context.Context) (expenseResponse, error) {
 	resp := expenseResponse{}
 
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(ctx)
 	if err != nil {
 		return resp, err
 	}
 
-	db, err := connectDatabase(cfg)
+	db, err := connectDatabase(ctx, cfg)
 	if err != nil {
 		return resp, err
 	}
@@ -27,10 +27,10 @@ func Get(ctx context.Context) (expenseResponse, error) {
 
 	remaining := calculateRemainingExpense(weekData.day, weeklyExpense, cfg.maxExpense)
 	return expenseResponse{
-		year:     weekData.year,
-		week:     weekData.week,
-		dayLabel: mapDayLabel[weekData.day],
-		remaning: remaining,
+		Year:      weekData.year,
+		Week:      weekData.week,
+		DayLabel:  mapDayLabel[weekData.day],
+		Remaining: remaining,
 	}, nil
 }
 
@@ -42,13 +42,13 @@ func getCurrentWeekData() WeekData {
 }
 
 func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64) expenseRemaining {
-	weekdayRemaining := maxExpense - expense.weekday
-	weekendRemaining := maxExpense - expense.weekend
+	weekdayRemaining := maxExpense - expense.Weekday
+	weekendRemaining := maxExpense - expense.Weekend
 
 	response := expenseRemaining{
-		weekday: formatRupiah(weekdayRemaining),
-		weekend: formatRupiah(weekendRemaining),
-		days:    make([]string, 7),
+		Weekday: formatRupiah(weekdayRemaining),
+		Weekend: formatRupiah(weekendRemaining),
+		Days:    make([]string, 7),
 	}
 
 	// If today is a weekday (Monday to Friday)
@@ -70,7 +70,7 @@ func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining, weekendRema
 		if weekdayRemainingPerDay > 0 {
 			strDay = formatRupiah(weekdayRemainingPerDay)
 		}
-		r.days[i] = strDay
+		r.Days[i] = strDay
 	}
 	r.weekendExpense(day, weekendRemaining)
 }
@@ -79,7 +79,7 @@ func (r *expenseRemaining) weekendExpense(day int, weekendRemaining int64) {
 	weekendRemainingPerDay := weekendRemaining
 	if day != 0 {
 		weekendRemainingPerDay = weekendRemaining / 2
-		r.days[6] = formatRupiah(weekendRemainingPerDay)
+		r.Days[6] = formatRupiah(weekendRemainingPerDay)
 	}
-	r.days[0] = formatRupiah(weekendRemainingPerDay)
+	r.Days[0] = formatRupiah(weekendRemainingPerDay)
 }
