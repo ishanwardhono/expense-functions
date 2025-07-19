@@ -8,7 +8,7 @@ import (
 func Get(ctx context.Context) (expenseResponse, error) {
 	resp := expenseResponse{}
 
-	cfg, err := loadConfig(ctx)
+	cfg, err := loadConfig()
 	if err != nil {
 		return resp, err
 	}
@@ -19,7 +19,7 @@ func Get(ctx context.Context) (expenseResponse, error) {
 	}
 	defer db.Close()
 
-	weekData := getCurrentWeekData()
+	weekData := getWeekData(cfg.time)
 	weeklyExpense, err := getCurrentWeekExpense(ctx, db, weekData)
 	if err != nil {
 		return resp, err
@@ -34,10 +34,9 @@ func Get(ctx context.Context) (expenseResponse, error) {
 	}, nil
 }
 
-func getCurrentWeekData() WeekData {
-	now := time.Now()
-	year, week := now.ISOWeek()
-	day := int(now.Weekday())
+func getWeekData(t time.Time) WeekData {
+	year, week := t.ISOWeek()
+	day := int(t.Weekday())
 	return WeekData{year: year, week: week, day: day}
 }
 
@@ -65,7 +64,7 @@ func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64)
 func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining, weekendRemaining int64) {
 	weekdayRemainingDay := 6 - day
 	weekdayRemainingPerDay := weekdayRemaining / int64(weekdayRemainingDay)
-	for i := day; i <= 5; i++ {
+	for i := day - 1; i < 5; i++ {
 		strDay := "Ga ada jajan"
 		if weekdayRemainingPerDay > 0 {
 			strDay = formatRupiah(weekdayRemainingPerDay)
@@ -79,7 +78,7 @@ func (r *expenseRemaining) weekendExpense(day int, weekendRemaining int64) {
 	weekendRemainingPerDay := weekendRemaining
 	if day != 0 {
 		weekendRemainingPerDay = weekendRemaining / 2
-		r.Days[6] = formatRupiah(weekendRemainingPerDay)
+		r.Days[5] = formatRupiah(weekendRemainingPerDay)
 	}
-	r.Days[0] = formatRupiah(weekendRemainingPerDay)
+	r.Days[6] = formatRupiah(weekendRemainingPerDay)
 }
