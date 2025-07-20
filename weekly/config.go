@@ -8,10 +8,16 @@ import (
 )
 
 type config struct {
-	maxExpense   int64
-	projectID    string
-	databaseName string
-	time         time.Time
+	maxExpense int64
+	time       time.Time
+
+	databaseHost        string
+	databasePort        string
+	databaseUser        string
+	databasePassword    string
+	databaseName        string
+	databaseSSLRootCert string
+	databaseTimeout     int
 }
 
 func loadConfig() (*config, error) {
@@ -21,21 +27,7 @@ func loadConfig() (*config, error) {
 		return nil, fmt.Errorf("invalid MAX_EXPENSE environment variable: %v", err)
 	}
 
-	projectID := os.Getenv("GOOGLE_CLOUD_PROJECT")
-	if projectID == "" {
-		return nil, fmt.Errorf("GOOGLE_CLOUD_PROJECT environment variable is required")
-	}
-
-	databaseName := os.Getenv("FIRESTORE_DATABASE")
-	if databaseName == "" {
-		return nil, fmt.Errorf("FIRESTORE_DATABASE environment variable is required")
-	}
-
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return nil, fmt.Errorf("failed to load Asia/Jakarta location: %v", err)
-	}
-	t := time.Now().In(loc)
+	t := now()
 	mockTimeStr := os.Getenv("TIME")
 	if mockTimeStr != "" {
 		t, err = time.Parse(time.RFC3339, mockTimeStr)
@@ -45,9 +37,13 @@ func loadConfig() (*config, error) {
 	}
 
 	return &config{
-		maxExpense:   maxExpense,
-		projectID:    projectID,
-		databaseName: databaseName,
-		time:         t,
+		maxExpense:          maxExpense,
+		databaseHost:        os.Getenv("DB_HOST"),
+		databasePort:        os.Getenv("DB_PORT"),
+		databaseUser:        os.Getenv("DB_USER"),
+		databasePassword:    os.Getenv("DB_PASSWORD"),
+		databaseName:        os.Getenv("DB_NAME"),
+		databaseSSLRootCert: os.Getenv("DB_SSL_ROOT_CERT"),
+		time:                t,
 	}, nil
 }

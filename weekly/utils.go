@@ -1,6 +1,9 @@
 package weekly
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 var mapDayLabel = map[int]string{
 	0: "Minggu",
@@ -10,6 +13,11 @@ var mapDayLabel = map[int]string{
 	4: "Kamis",
 	5: "Jumat",
 	6: "Sabtu",
+}
+
+func now() time.Time {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	return time.Now().In(loc)
 }
 
 func formatRupiah(amount int64) string {

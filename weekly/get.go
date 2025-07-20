@@ -13,7 +13,7 @@ func Get(ctx context.Context) (expenseResponse, error) {
 		return resp, err
 	}
 
-	db, err := connectDatabase(ctx, cfg)
+	db, err := connectDatabase(cfg)
 	if err != nil {
 		return resp, err
 	}
