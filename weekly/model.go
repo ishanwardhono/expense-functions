@@ -21,6 +21,7 @@ type expenseResponse struct {
 	Year      int              `json:"year"`
 	Week      int              `json:"week"`
 	DayLabel  string           `json:"day_label"`
+	DateRange string           `json:"date_range"`
 	Remaining expenseRemaining `json:"remaining"`
 }
 

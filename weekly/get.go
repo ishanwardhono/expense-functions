@@ -2,7 +2,6 @@ package weekly
 
 import (
 	"context"
-	"time"
 )
 
 func Get(ctx context.Context) (expenseResponse, error) {
@@ -30,14 +29,9 @@ func Get(ctx context.Context) (expenseResponse, error) {
 		Year:      weekData.year,
 		Week:      weekData.week,
 		DayLabel:  mapDayLabel[weekData.day],
+		DateRange: getDateRange(weekData.year, weekData.week),
 		Remaining: remaining,
 	}, nil
-}
-
-func getWeekData(t time.Time) WeekData {
-	year, week := t.ISOWeek()
-	day := (int(t.Weekday()) - 1 + 7) % 7
-	return WeekData{year: year, week: week, day: day}
 }
 
 func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64) expenseRemaining {
