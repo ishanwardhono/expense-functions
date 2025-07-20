@@ -36,7 +36,7 @@ func Get(ctx context.Context) (expenseResponse, error) {
 
 func getWeekData(t time.Time) WeekData {
 	year, week := t.ISOWeek()
-	day := int(t.Weekday())
+	day := (int(t.Weekday()) - 1 + 7) % 7
 	return WeekData{year: year, week: week, day: day}
 }
 
@@ -45,13 +45,12 @@ func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64)
 	weekendRemaining := maxExpense - expense.Weekend
 
 	response := expenseRemaining{
-		Weekday: formatRupiah(weekdayRemaining),
-		Weekend: formatRupiah(weekendRemaining),
-		Days:    make([]string, 7),
+		Weekday: toDataLabel(weekdayRemaining, day >= 5),
+		Weekend: toDataLabel(weekendRemaining, false),
 	}
 
 	// If today is a weekday (Monday to Friday)
-	if day >= 1 && day <= 5 {
+	if day < 5 {
 		response.weekdayExpense(day, weekdayRemaining, weekendRemaining)
 		return response
 	}
@@ -62,23 +61,35 @@ func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64)
 }
 
 func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining, weekendRemaining int64) {
-	weekdayRemainingDay := 6 - day
-	weekdayRemainingPerDay := weekdayRemaining / int64(weekdayRemainingDay)
-	for i := day - 1; i < 5; i++ {
-		strDay := "Ga ada jajan"
-		if weekdayRemainingPerDay > 0 {
-			strDay = formatRupiah(weekdayRemainingPerDay)
+	remainingDay := 5 - day
+	remainingPerDay := weekdayRemaining / int64(remainingDay)
+	days := make([]string, 5)
+	for i := day; i < 5; i++ {
+		strDay := GaAdaJajanLabel
+		if remainingPerDay > 0 {
+			strDay = formatRupiah(remainingPerDay)
 		}
-		r.Days[i] = strDay
+		days[i] = strDay
 	}
+
+	r.Days.Senin = days[0]
+	r.Days.Selasa = days[1]
+	r.Days.Rabu = days[2]
+	r.Days.Kamis = days[3]
+	r.Days.Jumat = days[4]
 	r.weekendExpense(day, weekendRemaining)
 }
 
 func (r *expenseRemaining) weekendExpense(day int, weekendRemaining int64) {
-	weekendRemainingPerDay := weekendRemaining
-	if day != 0 {
-		weekendRemainingPerDay = weekendRemaining / 2
-		r.Days[5] = formatRupiah(weekendRemainingPerDay)
+	strDay := GaAdaJajanLabel
+	if weekendRemaining > 0 {
+		if day <= 5 {
+			weekendRemaining /= 2
+		}
+		strDay = formatRupiah(weekendRemaining)
 	}
-	r.Days[6] = formatRupiah(weekendRemainingPerDay)
+	if day <= 5 {
+		r.Days.Sabtu = strDay
+	}
+	r.Days.Minggu = strDay
 }

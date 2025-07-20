@@ -25,7 +25,34 @@ type expenseResponse struct {
 }
 
 type expenseRemaining struct {
-	Weekday string   `json:"weekday"`
-	Weekend string   `json:"weekend"`
-	Days    []string `json:"days"`
+	Weekday dataLabel `json:"weekday"`
+	Weekend dataLabel `json:"weekend"`
+	Days    struct {
+		Senin  string `json:"Senin"`
+		Selasa string `json:"Selasa"`
+		Rabu   string `json:"Rabu"`
+		Kamis  string `json:"Kamis"`
+		Jumat  string `json:"Jumat"`
+		Sabtu  string `json:"Sabtu"`
+		Minggu string `json:"Minggu"`
+	} `json:"days"`
+}
+
+type dataLabel struct {
+	Label      string `json:"label"`
+	LabelColor string `json:"label_color,omitempty"`
+}
+
+func toDataLabel(remaining int64, isDone bool) dataLabel {
+	labelColor := ""
+	if isDone {
+		labelColor = "green"
+	}
+	if remaining < 0 {
+		labelColor = "red"
+	}
+	return dataLabel{
+		Label:      formatRupiah(remaining),
+		LabelColor: labelColor,
+	}
 }

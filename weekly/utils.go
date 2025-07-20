@@ -5,14 +5,16 @@ import (
 	"time"
 )
 
+const GaAdaJajanLabel = "Ga ada jajan"
+
 var mapDayLabel = map[int]string{
-	0: "Minggu",
-	1: "Senin",
-	2: "Selasa",
-	3: "Rabu",
-	4: "Kamis",
-	5: "Jumat",
-	6: "Sabtu",
+	0: "Senin",
+	1: "Selasa",
+	2: "Rabu",
+	3: "Kamis",
+	4: "Jumat",
+	5: "Sabtu",
+	6: "Minggu",
 }
 
 func now() time.Time {
@@ -21,9 +23,17 @@ func now() time.Time {
 }
 
 func formatRupiah(amount int64) string {
+	isNegative := amount < 0
+	if isNegative {
+		amount = -amount
+	}
+
 	str := fmt.Sprintf("%d", amount)
 	n := len(str)
 	if n <= 3 {
+		if isNegative {
+			return "-Rp " + str
+		}
 		return "Rp " + str
 	}
 
@@ -33,6 +43,10 @@ func formatRupiah(amount int64) string {
 			result += "."
 		}
 		result += string(digit)
+	}
+
+	if isNegative {
+		return "- Rp " + result
 	}
 	return "Rp " + result
 }
