@@ -55,3 +55,43 @@ func insertCurrentWeekExpense(ctx context.Context, db *sql.DB, weekData WeekData
 	}
 	return expense, nil
 }
+
+func addWeekdayExpense(ctx context.Context, db *sql.DB, year, week int, weekdayAmount int64) error {
+	query := `UPDATE weekly_expense SET weekday = weekday + $1 
+			  WHERE year = $2 AND week = $3`
+	result, err := db.ExecContext(ctx, query, weekdayAmount, year, week)
+	if err != nil {
+		return fmt.Errorf("failed to add weekday expense: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no weekly expense record found for year %d, week %d", year, week)
+	}
+
+	return nil
+}
+
+func addWeekendExpense(ctx context.Context, db *sql.DB, year, week int, weekendAmount int64) error {
+	query := `UPDATE weekly_expense SET weekend = weekend + $1 
+			  WHERE year = $2 AND week = $3`
+	result, err := db.ExecContext(ctx, query, weekendAmount, year, week)
+	if err != nil {
+		return fmt.Errorf("failed to add weekend expense: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("no weekly expense record found for year %d, week %d", year, week)
+	}
+
+	return nil
+}

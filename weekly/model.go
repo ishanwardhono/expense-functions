@@ -57,3 +57,8 @@ func toDataLabel(remaining int64, isDone bool) dataLabel {
 		LabelColor: labelColor,
 	}
 }
+
+type AddRequest struct {
+	Amount int64   `json:"amount"`
+	Date   *string `json:"date"`
+}
