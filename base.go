@@ -3,8 +3,6 @@ package expensefunction
 import (
 	"encoding/json"
 	"net/http"
-	"os"
-	"strings"
 )
 
 type handlerFunc func(r *http.Request) (interface{}, error)
@@ -13,17 +11,14 @@ func baseHandler(hf handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// Add CORS headers for local development
-		if isLocalEnvironment() {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-			// Handle preflight requests
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
 		resp, err := hf(r)
@@ -45,10 +40,4 @@ func handleError(w http.ResponseWriter, err error) {
 	w.WriteHeader(http.StatusInternalServerError)
 	errorResp := map[string]string{"error": err.Error()}
 	json.NewEncoder(w).Encode(errorResp)
-}
-
-// isLocalEnvironment checks if the application is running in local development
-func isLocalEnvironment() bool {
-	env := os.Getenv("ENV")
-	return strings.ToLower(env) == "local"
 }
