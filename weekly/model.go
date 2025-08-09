@@ -1,6 +1,10 @@
 package weekly
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type WeekData struct {
 	year int
@@ -102,4 +106,19 @@ func toDataLabel(remaining int64, isDone bool) dataLabel {
 type AddRequest struct {
 	Amount int64   `json:"amount"`
 	Date   *string `json:"date"`
+	Type   string  `json:"type"`
+	Note   string  `json:"note"`
+}
+
+func (r *AddRequest) ToExpense(weekData WeekData, t time.Time) Expense {
+	return Expense{
+		Id:          uuid.New().String(),
+		Year:        weekData.year,
+		Week:        weekData.week,
+		Day:         weekData.day,
+		Amount:      r.Amount,
+		Type:        r.Type,
+		Note:        r.Note,
+		CreatedTime: t,
+	}
 }
