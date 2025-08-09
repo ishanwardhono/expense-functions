@@ -19,12 +19,12 @@ func Get(ctx context.Context) (expenseResponse, error) {
 	defer db.Close()
 
 	weekData := getWeekData(cfg.time)
-	weeklyExpense, err := getCurrentWeekExpense(ctx, db, weekData)
+	expenses, err := getCurrentWeekExpense(ctx, db, weekData)
 	if err != nil {
 		return resp, err
 	}
 
-	remaining := calculateRemainingExpense(weekData.day, weeklyExpense, cfg.maxExpense)
+	remaining := calculateRemainingExpense(weekData.day, expenses, cfg.maxExpense)
 	return expenseResponse{
 		Year:      weekData.year,
 		Week:      weekData.week,
@@ -34,27 +34,27 @@ func Get(ctx context.Context) (expenseResponse, error) {
 	}, nil
 }
 
-func calculateRemainingExpense(day int, expense WeeklyExpense, maxExpense int64) expenseRemaining {
-	weekdayRemaining := maxExpense - expense.Weekday
-	weekendRemaining := maxExpense - expense.Weekend
+func calculateRemainingExpense(day int, expenses Expenses, maxExpense int64) expenseRemaining {
+	weekdayExpense, saturdayExpense, sundayExpense := expenses.GetDayExpenses()
+	weekdayRemaining := maxExpense - weekdayExpense
+	saturdayRemaining := (maxExpense / 2) - saturdayExpense
+	sundayRemaining := (maxExpense / 2) - sundayExpense
 
 	response := expenseRemaining{
-		Weekday: toDataLabel(weekdayRemaining, day >= 5),
-		Weekend: toDataLabel(weekendRemaining, false),
+		Weekday:  toDataLabel(weekdayRemaining, day >= 5),
+		Saturday: toDataLabel(saturdayRemaining, day >= 6),
+		Sunday:   toDataLabel(sundayRemaining, false),
 	}
 
-	// If today is a weekday (Monday to Friday)
 	if day < 5 {
-		response.weekdayExpense(day, weekdayRemaining, weekendRemaining)
-		return response
+		response.weekdayExpense(day, weekdayRemaining)
 	}
 
-	// If today is a weekend (Saturday or Sunday)
-	response.weekendExpense(day, weekendRemaining)
+	response.weekendExpense(day, saturdayRemaining, sundayRemaining)
 	return response
 }
 
-func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining, weekendRemaining int64) {
+func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining int64) {
 	remainingDay := 5 - day
 	remainingPerDay := weekdayRemaining / int64(remainingDay)
 	days := make([]string, 5)
@@ -71,19 +71,11 @@ func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining, weekendRema
 	r.Days.Rabu = days[2]
 	r.Days.Kamis = days[3]
 	r.Days.Jumat = days[4]
-	r.weekendExpense(day, weekendRemaining)
 }
 
-func (r *expenseRemaining) weekendExpense(day int, weekendRemaining int64) {
-	strDay := GaAdaJajanLabel
-	if weekendRemaining > 0 {
-		if day <= 5 {
-			weekendRemaining /= 2
-		}
-		strDay = formatRupiah(weekendRemaining)
-	}
+func (r *expenseRemaining) weekendExpense(day int, saturdayRemaining, sundayRemaining int64) {
 	if day <= 5 {
-		r.Days.Sabtu = strDay
+		r.Days.Sabtu = formatRupiah(saturdayRemaining)
 	}
-	r.Days.Minggu = strDay
+	r.Days.Minggu = formatRupiah(sundayRemaining)
 }

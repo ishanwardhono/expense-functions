@@ -8,13 +8,31 @@ type WeekData struct {
 	day  int
 }
 
-type WeeklyExpense struct {
-	Id          string    `firestore:"-"`
-	Year        int       `firestore:"year"`
-	Week        int       `firestore:"week"`
-	Weekday     int64     `firestore:"weekday"`
-	Weekend     int64     `firestore:"weekend"`
-	CreatedTime time.Time `firestore:"created_time"`
+type Expenses []Expense
+
+type Expense struct {
+	Id          string    `db:"id"`
+	Year        int       `db:"year"`
+	Week        int       `db:"week"`
+	Day         int       `db:"day"`
+	Amount      int64     `db:"amount"`
+	Type        string    `db:"type"`
+	Note        string    `db:"note"`
+	CreatedTime time.Time `db:"created_time"`
+}
+
+func (e Expenses) GetDayExpenses() (weekday, saturday, sunday int64) {
+	for _, expense := range e {
+		switch {
+		case expense.Day < 5:
+			weekday += expense.Amount
+		case expense.Day == 5:
+			saturday += expense.Amount
+		case expense.Day == 6:
+			sunday += expense.Amount
+		}
+	}
+	return
 }
 
 type expenseResponse struct {
@@ -26,9 +44,10 @@ type expenseResponse struct {
 }
 
 type expenseRemaining struct {
-	Weekday dataLabel `json:"weekday"`
-	Weekend dataLabel `json:"weekend"`
-	Days    struct {
+	Weekday  dataLabel `json:"weekday"`
+	Saturday dataLabel `json:"saturday"`
+	Sunday   dataLabel `json:"sunday"`
+	Days     struct {
 		Senin  string `json:"Senin"`
 		Selasa string `json:"Selasa"`
 		Rabu   string `json:"Rabu"`
