@@ -35,6 +35,19 @@ func (e Expenses) GetDayExpenses() (weekday, saturday, sunday int64) {
 	return
 }
 
+func (e Expenses) ToDetailsResponse() (details []expenseDetail) {
+	for _, expense := range e {
+		details = append(details, expenseDetail{
+			Day:    expense.Day,
+			Amount: formatRupiah(expense.Amount),
+			Type:   expense.Type,
+			Note:   expense.Note,
+			Time:   expense.CreatedTime.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return
+}
+
 type expenseResponse struct {
 	Year      int              `json:"year"`
 	Week      int              `json:"week"`
@@ -56,6 +69,15 @@ type expenseRemaining struct {
 		Sabtu  string `json:"Sabtu"`
 		Minggu string `json:"Minggu"`
 	} `json:"days"`
+	Details []expenseDetail `json:"details"`
+}
+
+type expenseDetail struct {
+	Day    int    `json:"day"`
+	Amount string `json:"amount"`
+	Type   string `json:"type"`
+	Note   string `json:"note"`
+	Time   string `json:"time"`
 }
 
 type dataLabel struct {

@@ -44,6 +44,7 @@ func calculateRemainingExpense(day int, expenses Expenses, maxExpense int64) exp
 		Weekday:  toDataLabel(weekdayRemaining, day >= 5),
 		Saturday: toDataLabel(saturdayRemaining, day >= 6),
 		Sunday:   toDataLabel(sundayRemaining, false),
+		Details:  expenses.ToDetailsResponse(),
 	}
 
 	if day < 5 {
