@@ -18,7 +18,7 @@ func Add(ctx context.Context, req AddRequest) error {
 
 	t := now()
 	if req.Date != nil {
-		t, err = time.Parse(time.DateOnly, *req.Date)
+		t, err = time.Parse(time.DateTime, *req.Date)
 		if err != nil {
 			return err
 		}
@@ -31,11 +31,8 @@ func Add(ctx context.Context, req AddRequest) error {
 	defer db.Close()
 
 	weekData := getWeekData(t)
-	if weekData.day < 5 {
-		err = addWeekdayExpense(ctx, db, weekData.year, weekData.week, req.Amount)
-	} else {
-		err = addWeekendExpense(ctx, db, weekData.year, weekData.week, req.Amount)
-	}
+	expense := req.ToExpense(weekData, t)
+	err = addExpense(ctx, db, expense)
 	if err != nil {
 		return err
 	}
