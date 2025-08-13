@@ -7,3 +7,6 @@ run-weekly-get:
 
 run-weekly-add:
 	@make run func=WeeklyAdd port=8198
+
+run-hello:
+	@make run func=Hello port=8100

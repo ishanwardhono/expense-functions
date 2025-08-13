@@ -12,6 +12,7 @@ import (
 func init() {
 	functions.HTTP("WeeklyGet", baseHandler(weeklyGet))
 	functions.HTTP("WeeklyAdd", baseHandler(weeklyAdd))
+	functions.HTTP("Hello", baseHandler(hello))
 }
 
 func weeklyGet(r *http.Request) (interface{}, error) {
@@ -35,5 +36,17 @@ func weeklyAdd(r *http.Request) (interface{}, error) {
 		return nil, err
 	}
 	log.Printf("successfully added weekly expense: %v", req)
+	return nil, nil
+}
+
+func hello(r *http.Request) (interface{}, error) {
+	var req weekly.HelloRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("failed to decode request body: %v", err)
+		return nil, err
+	}
+	if err := weekly.Hello(r.Context(), req); err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
