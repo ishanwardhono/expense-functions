@@ -21,7 +21,7 @@ func weeklyGet(r *http.Request) (interface{}, error) {
 		log.Printf("failed to get weekly expenses: %v", err)
 		return nil, err
 	}
-	log.Printf("successfully retrieved weekly expenses: %v", res)
+	log.Printf("successfully retrieved weekly expenses")
 	return res, nil
 }
 
@@ -35,7 +35,7 @@ func weeklyAdd(r *http.Request) (interface{}, error) {
 		log.Printf("failed to add weekly expense: %v", err)
 		return nil, err
 	}
-	log.Printf("successfully added weekly expense: %v", req)
+	log.Printf("successfully added weekly expense")
 	return nil, nil
 }
 
