@@ -1,9 +1,3 @@
-CREATE OR REPLACE FUNCTION gen_random_uuid() RETURNS UUID AS $$
-BEGIN
-    RETURN (SELECT uuid_generate_v4());
-END;
-$$ LANGUAGE plpgsql;
-
 CREATE TABLE IF NOT EXISTS public.expense (
 	id UUID NOT NULL DEFAULT gen_random_uuid(),
 	year INT2 NOT NULL,
@@ -32,3 +26,7 @@ CREATE TABLE IF NOT EXISTS public.monthly_expense (
 	INDEX expense_created_time_idx (created_time DESC),
 	INDEX expense_type_idx (type ASC)
 );
+
+-- Fix UUID function for existing tables
+ALTER TABLE public.expense ALTER COLUMN id SET DEFAULT NULL;
+ALTER TABLE public.monthly_expense ALTER COLUMN id SET DEFAULT NULL;
