@@ -1,4 +1,4 @@
-package weekly
+package monthly
 
 import (
 	"context"
@@ -9,15 +9,18 @@ import (
 )
 
 func Add(ctx context.Context, req AddRequest) error {
-	if req.Amount == 0 {
-		return fmt.Errorf("amount cannot be zero")
-	}
-
 	cfg, err := loadConfig()
 	if err != nil {
 		return err
 	}
 
+	db, err := common.ConnectDatabase(cfg.dbConfig)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Use provided date or current time
 	t := cfg.time
 	if req.Date != nil {
 		t, err = time.Parse("2006-01-02", *req.Date)
@@ -27,18 +30,8 @@ func Add(ctx context.Context, req AddRequest) error {
 		t = t.In(common.Loc)
 	}
 
-	db, err := connectDatabase(cfg)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
+	monthData := getPayPeriodMonth(t)
+	expense := req.ToMonthlyExpense(monthData, t)
 
-	weekData := getWeekData(t)
-	expense := req.ToExpense(weekData, t)
-	err = addExpense(ctx, db, expense)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return addMonthlyExpense(ctx, db, expense)
 }

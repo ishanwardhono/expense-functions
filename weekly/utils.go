@@ -3,6 +3,8 @@ package weekly
 import (
 	"fmt"
 	"time"
+
+	"github.com/ishanwardhono/expense-function/common"
 )
 
 const GaAdaJajanLabel = "Ga ada jajan"
@@ -18,8 +20,7 @@ var mapDayLabel = map[int]string{
 }
 
 func now() time.Time {
-	loc, _ := time.LoadLocation("Asia/Jakarta")
-	return time.Now().In(loc)
+	return common.Now()
 }
 
 func getWeekData(t time.Time) WeekData {
@@ -63,33 +64,4 @@ func getDateRange(year, week int) string {
 
 	// Different year
 	return fmt.Sprintf("%d %s %d - %d %s %d", mondayDay, mondayMonth, mondayYear, sundayDay, sundayMonth, sundayYear)
-}
-
-func formatRupiah(amount int64) string {
-	isNegative := amount < 0
-	if isNegative {
-		amount = -amount
-	}
-
-	str := fmt.Sprintf("%d", amount)
-	n := len(str)
-	if n <= 3 {
-		if isNegative {
-			return "- Rp " + str
-		}
-		return "Rp " + str
-	}
-
-	result := ""
-	for i, digit := range str {
-		if i > 0 && (n-i)%3 == 0 {
-			result += "."
-		}
-		result += string(digit)
-	}
-
-	if isNegative {
-		return "- Rp " + result
-	}
-	return "Rp " + result
 }
