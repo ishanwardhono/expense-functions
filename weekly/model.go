@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/ishanwardhono/expense-function/common"
 )
 
 type WeekData struct {
@@ -43,7 +44,7 @@ func (e Expenses) ToDetailsResponse() (details []expenseDetail) {
 	for _, expense := range e {
 		details = append(details, expenseDetail{
 			Day:    expense.Day,
-			Amount: formatRupiah(expense.Amount),
+			Amount: common.FormatRupiah(expense.Amount),
 			Type:   expense.Type,
 			Note:   expense.Note,
 			Time:   expense.CreatedTime.Format("2006-01-02 15:04:05"),
@@ -98,7 +99,7 @@ func toDataLabel(remaining int64, isDone bool) dataLabel {
 		labelColor = "red"
 	}
 	return dataLabel{
-		Label:      formatRupiah(remaining),
+		Label:      common.FormatRupiah(remaining),
 		LabelColor: labelColor,
 	}
 }

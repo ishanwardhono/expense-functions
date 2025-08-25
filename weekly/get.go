@@ -2,6 +2,8 @@ package weekly
 
 import (
 	"context"
+
+	"github.com/ishanwardhono/expense-function/common"
 )
 
 func Get(ctx context.Context) (expenseResponse, error) {
@@ -62,7 +64,7 @@ func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining int64) {
 	for i := day; i < 5; i++ {
 		strDay := GaAdaJajanLabel
 		if remainingPerDay > 0 {
-			strDay = formatRupiah(remainingPerDay)
+			strDay = common.FormatRupiah(remainingPerDay)
 		}
 		days[i] = strDay
 	}
@@ -76,7 +78,7 @@ func (r *expenseRemaining) weekdayExpense(day int, weekdayRemaining int64) {
 
 func (r *expenseRemaining) weekendExpense(day int, saturdayRemaining, sundayRemaining int64) {
 	if day <= 5 {
-		r.Days.Sabtu = formatRupiah(saturdayRemaining)
+		r.Days.Sabtu = common.FormatRupiah(saturdayRemaining)
 	}
-	r.Days.Minggu = formatRupiah(sundayRemaining)
+	r.Days.Minggu = common.FormatRupiah(sundayRemaining)
 }

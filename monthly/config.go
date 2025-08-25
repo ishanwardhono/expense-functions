@@ -1,4 +1,4 @@
-package weekly
+package monthly
 
 import (
 	"time"
@@ -13,7 +13,7 @@ type config struct {
 }
 
 func loadConfig() (*config, error) {
-	maxExpense, err := common.LoadMaxExpense()
+	maxExpense, err := common.LoadMaxMonthlyExpense()
 	if err != nil {
 		return nil, err
 	}

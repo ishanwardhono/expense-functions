@@ -3,29 +3,13 @@ package weekly
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/ishanwardhono/expense-function/common"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
 )
 
 func connectDatabase(cfg *config) (*sqlx.DB, error) {
-	connectionString := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslrootcert=%s sslmode=verify-full",
-		cfg.databaseHost, cfg.databasePort, cfg.databaseUser, cfg.databasePassword, cfg.databaseName, cfg.databaseSSLRootCert)
-
-	db, err := sqlx.Open("postgres", connectionString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(0)
-	db.SetConnMaxLifetime(time.Second * time.Duration(cfg.databaseTimeout))
-
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
-	}
-
-	return db, nil
+	return common.ConnectDatabase(cfg.dbConfig)
 }
 
 func getCurrentWeekExpense(ctx context.Context, db *sqlx.DB, weekData WeekData) (Expenses, error) {
