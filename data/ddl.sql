@@ -1,4 +1,10 @@
-CREATE TABLE public.expense (
+CREATE OR REPLACE FUNCTION gen_random_uuid() RETURNS UUID AS $$
+BEGIN
+    RETURN (SELECT uuid_generate_v4());
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TABLE IF NOT EXISTS public.expense (
 	id UUID NOT NULL DEFAULT gen_random_uuid(),
 	year INT2 NOT NULL,
 	week INT2 NOT NULL,
@@ -9,11 +15,11 @@ CREATE TABLE public.expense (
 	created_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	CONSTRAINT expense_pk PRIMARY KEY (id)
 );
-CREATE INDEX expense_year_week_day_idx ON public.expense (year, week, day);
-CREATE INDEX expense_created_time_idx ON public.expense (created_time DESC);
-CREATE INDEX expense_type_idx ON public.expense (type);
+CREATE INDEX IF NOT EXISTS expense_year_week_day_idx ON public.expense (year, week, day);
+CREATE INDEX IF NOT EXISTS expense_created_time_idx ON public.expense (created_time DESC);
+CREATE INDEX IF NOT EXISTS expense_type_idx ON public.expense (type);
 
-CREATE TABLE public.monthly_expense (
+CREATE TABLE IF NOT EXISTS public.monthly_expense (
 	id UUID NOT NULL DEFAULT gen_random_uuid(),
 	year INT2 NOT NULL,
 	month INT2 NOT NULL,
