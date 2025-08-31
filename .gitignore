@@ -1,3 +1,6 @@
 .env
 *.crt
 debug.go
+
+# VS Code configuration
+.vscode/
