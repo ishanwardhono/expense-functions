@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/ishanwardhono/expense-function/common"
 )
 
 func Add(ctx context.Context, req AddRequest) error {
@@ -24,7 +22,6 @@ func Add(ctx context.Context, req AddRequest) error {
 		if err != nil {
 			return fmt.Errorf("invalid date format: %v", err)
 		}
-		t = t.In(common.Loc)
 	}
 
 	db, err := connectDatabase(cfg)

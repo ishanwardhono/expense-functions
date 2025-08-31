@@ -27,7 +27,6 @@ func Add(ctx context.Context, req AddRequest) error {
 		if err != nil {
 			return fmt.Errorf("invalid date format: %v", err)
 		}
-		t = t.In(common.Loc)
 	}
 
 	monthData := getPayPeriodMonth(t)
