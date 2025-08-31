@@ -23,7 +23,7 @@ func Add(ctx context.Context, req AddRequest) error {
 	// Use provided date or current time
 	t := cfg.time
 	if req.Date != nil {
-		t, err = time.Parse("2006-01-02", *req.Date)
+		t, err = time.Parse(time.DateTime, *req.Date)
 		if err != nil {
 			return fmt.Errorf("invalid date format: %v", err)
 		}
