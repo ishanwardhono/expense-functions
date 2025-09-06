@@ -4,13 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ishanwardhono/expense-function/common"
 	"github.com/jmoiron/sqlx"
 )
-
-func connectDatabase(cfg *config) (*sqlx.DB, error) {
-	return common.ConnectDatabase(cfg.dbConfig)
-}
 
 func getCurrentWeekExpense(ctx context.Context, db *sqlx.DB, weekData WeekData) (Expenses, error) {
 	var expenses Expenses

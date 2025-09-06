@@ -7,6 +7,37 @@ import (
 	"time"
 )
 
+type config struct {
+	MaxExpense        int64
+	MaxMonthlyExpense int64
+	Time              time.Time
+	DbConfig          *DatabaseConfig
+}
+
+func LoadConfig() (*config, error) {
+	maxExpense, err := LoadMaxExpense()
+	if err != nil {
+		return nil, err
+	}
+
+	maxMonthlyExpense, err := LoadMaxMonthlyExpense()
+	if err != nil {
+		return nil, err
+	}
+
+	t, err := LoadTime()
+	if err != nil {
+		return nil, err
+	}
+
+	return &config{
+		MaxExpense:        maxExpense,
+		MaxMonthlyExpense: maxMonthlyExpense,
+		Time:              t,
+		DbConfig:          LoadDatabaseConfig(),
+	}, nil
+}
+
 func LoadMaxExpense() (int64, error) {
 	maxExpenseStr := os.Getenv("MAX_EXPENSE")
 	maxExpense, err := strconv.ParseInt(maxExpenseStr, 10, 64)

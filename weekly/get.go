@@ -9,24 +9,24 @@ import (
 func Get(ctx context.Context) (expenseResponse, error) {
 	resp := expenseResponse{}
 
-	cfg, err := loadConfig()
+	cfg, err := common.LoadConfig()
 	if err != nil {
 		return resp, err
 	}
 
-	db, err := connectDatabase(cfg)
+	db, err := common.ConnectDatabase(cfg.DbConfig)
 	if err != nil {
 		return resp, err
 	}
 	defer db.Close()
 
-	weekData := getWeekData(cfg.time)
+	weekData := getWeekData(cfg.Time)
 	expenses, err := getCurrentWeekExpense(ctx, db, weekData)
 	if err != nil {
 		return resp, err
 	}
 
-	remaining := calculateRemainingExpense(weekData.day, expenses, cfg.maxExpense)
+	remaining := calculateRemainingExpense(weekData.day, expenses, cfg.MaxExpense)
 	return expenseResponse{
 		Year:      weekData.year,
 		Week:      weekData.week,

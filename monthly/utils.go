@@ -125,7 +125,7 @@ func getLastMondayBefore(date time.Time) time.Time {
 	return date.AddDate(0, 0, -daysToSubtract)
 }
 
-func getMonthlyDateRange(year, month int) string {
+func getDateRange(year, month int) string {
 	// Calculate start date (25th of previous month)
 	var startMonth, startYear int
 	if month == 1 {
