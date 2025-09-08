@@ -61,6 +61,21 @@ services:
     command: go run cmd/main.go
     container_name: expense-monthly-add
 
+  # Recap Get Function
+  recap-get:
+    build: .
+    ports:
+      - "8195:8195"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=RecapGet
+      - PORT=8195
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-recap-get
+
   # Hello Function
   hello:
     build: .

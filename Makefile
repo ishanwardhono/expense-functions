@@ -14,5 +14,8 @@ run-monthly-get:
 run-monthly-add:
 	@make run func=MonthlyAdd port=8196
 
+run-recap-get:
+	@make run func=RecapGet port=8195
+
 run-hello:
 	@make run func=Hello port=8100

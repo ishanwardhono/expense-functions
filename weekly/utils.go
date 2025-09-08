@@ -5,7 +5,10 @@ import (
 	"time"
 )
 
-const GaAdaJajanLabel = "Ga ada jajan"
+const (
+	MaxExpense      = 500000
+	GaAdaJajanLabel = "Ga ada jajan"
+)
 
 var mapDayLabel = map[int]string{
 	0: "Senin",

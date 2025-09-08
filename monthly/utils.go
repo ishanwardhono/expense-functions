@@ -7,6 +7,10 @@ import (
 	"github.com/ishanwardhono/expense-function/common"
 )
 
+const (
+	MaxExpense = 9000000
+)
+
 var monthNames = map[int]string{
 	1:  "January",
 	2:  "February",
