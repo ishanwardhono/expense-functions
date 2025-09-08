@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # Weekly Get Function
+  weekly-get:
+    build: .
+    ports:
+      - "8199:8199"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=WeeklyGet
+      - PORT=8199
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-weekly-get
+
+  # Weekly Add Function
+  weekly-add:
+    build: .
+    ports:
+      - "8198:8198"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=WeeklyAdd
+      - PORT=8198
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-weekly-add
+
+  # Monthly Get Function
+  monthly-get:
+    build: .
+    ports:
+      - "8197:8197"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=MonthlyGet
+      - PORT=8197
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-monthly-get
+
+  # Monthly Add Function
+  monthly-add:
+    build: .
+    ports:
+      - "8196:8196"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=MonthlyAdd
+      - PORT=8196
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-monthly-add
+
+  # Hello Function
+  hello:
+    build: .
+    ports:
+      - "8100:8100"
+    volumes:
+      - .:/app
+    environment:
+      - FUNCTION_TARGET=Hello
+      - PORT=8100
+    env_file:
+      - .env
+    command: go run cmd/main.go
+    container_name: expense-hello

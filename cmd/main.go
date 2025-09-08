@@ -10,7 +10,7 @@ import (
 
 func main() {
 	log.Println("Starting Functions Framework...")
-	if err := funcframework.StartHostPort("localhost", os.Getenv("PORT")); err != nil {
+	if err := funcframework.StartHostPort("0.0.0.0", os.Getenv("PORT")); err != nil {
 		log.Fatalf("funcframework.StartHostPort: %v\n", err)
 	}
 }

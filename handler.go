@@ -49,10 +49,11 @@ func helloFunc(r *http.Request) (interface{}, error) {
 		log.Printf("failed to decode request body: %v", err)
 		return nil, err
 	}
-	if err := hello.Hello(r.Context(), req); err != nil {
+	res, err := hello.Hello(r.Context(), req)
+	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return res, nil
 }
 
 func monthlyGet(r *http.Request) (interface{}, error) {
