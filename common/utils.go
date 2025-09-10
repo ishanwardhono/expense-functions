@@ -7,7 +7,7 @@ type DataLabel struct {
 
 func ToDataLabel(remaining int64, isDone bool) DataLabel {
 	labelColor := ""
-	if isDone {
+	if isDone && remaining > 0 {
 		labelColor = "green"
 	}
 	if remaining < 0 {
