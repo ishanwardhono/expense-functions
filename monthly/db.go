@@ -7,14 +7,14 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func getCurrentMonthExpense(ctx context.Context, db *sqlx.DB, monthData monthData) (MonthlyExpenses, error) {
+func getCurrentMonthExpense(ctx context.Context, db *sqlx.DB, year, month int) (MonthlyExpenses, error) {
 	var expenses MonthlyExpenses
 	query := `SELECT id, year, month, amount, type, note, created_time FROM monthly_expense
 			  WHERE year = $1 AND month = $2
 			  ORDER BY created_time ASC
 			`
 
-	err := db.SelectContext(ctx, &expenses, query, monthData.year, monthData.month)
+	err := db.SelectContext(ctx, &expenses, query, year, month)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current month expenses: %w", err)
 	}
@@ -31,4 +31,18 @@ func addMonthlyExpense(ctx context.Context, db *sqlx.DB, expense MonthlyExpense)
 		return fmt.Errorf("failed to add monthly expense: %w", err)
 	}
 	return nil
+}
+
+func getSumMonthExpense(ctx context.Context, db *sqlx.DB, year, month int) (int64, error) {
+	var totalAmount int64
+	query := `SELECT COALESCE(SUM(amount), 0) FROM monthly_expense
+			  WHERE year = $1 AND month = $2
+			`
+
+	err := db.GetContext(ctx, &totalAmount, query, year, month)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get current month expenses: %w", err)
+	}
+
+	return totalAmount, nil
 }

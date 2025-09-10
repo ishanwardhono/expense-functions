@@ -8,6 +8,7 @@ import (
 	"github.com/GoogleCloudPlatform/functions-framework-go/functions"
 	"github.com/ishanwardhono/expense-function/hello"
 	"github.com/ishanwardhono/expense-function/monthly"
+	"github.com/ishanwardhono/expense-function/recap"
 	"github.com/ishanwardhono/expense-function/weekly"
 )
 
@@ -16,6 +17,7 @@ func init() {
 	functions.HTTP("WeeklyAdd", baseHandler(weeklyAdd))
 	functions.HTTP("MonthlyGet", baseHandler(monthlyGet))
 	functions.HTTP("MonthlyAdd", baseHandler(monthlyAdd))
+	functions.HTTP("RecapGet", baseHandler(recapGet))
 	functions.HTTP("Hello", baseHandler(helloFunc))
 }
 
@@ -49,10 +51,11 @@ func helloFunc(r *http.Request) (interface{}, error) {
 		log.Printf("failed to decode request body: %v", err)
 		return nil, err
 	}
-	if err := hello.Hello(r.Context(), req); err != nil {
+	res, err := hello.Hello(r.Context(), req)
+	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return res, nil
 }
 
 func monthlyGet(r *http.Request) (interface{}, error) {
@@ -77,4 +80,19 @@ func monthlyAdd(r *http.Request) (interface{}, error) {
 	}
 	log.Printf("successfully added monthly expense")
 	return nil, nil
+}
+
+func recapGet(r *http.Request) (interface{}, error) {
+	var req recap.GetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("failed to decode request body: %v", err)
+		return nil, err
+	}
+	res, err := recap.Get(r.Context(), req)
+	if err != nil {
+		log.Printf("failed to get recap: %v", err)
+		return nil, err
+	}
+	log.Printf("successfully retrieved recap")
+	return res, nil
 }

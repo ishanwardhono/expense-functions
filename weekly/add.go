@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/ishanwardhono/expense-function/common"
 )
 
 func Add(ctx context.Context, req AddRequest) error {
@@ -11,12 +13,12 @@ func Add(ctx context.Context, req AddRequest) error {
 		return fmt.Errorf("amount cannot be zero")
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := common.LoadConfig()
 	if err != nil {
 		return err
 	}
 
-	t := cfg.time
+	t := cfg.Time
 	if req.Date != nil {
 		t, err = time.Parse(time.DateTime, *req.Date)
 		if err != nil {
@@ -24,7 +26,7 @@ func Add(ctx context.Context, req AddRequest) error {
 		}
 	}
 
-	db, err := connectDatabase(cfg)
+	db, err := common.ConnectDatabase(cfg.DbConfig)
 	if err != nil {
 		return err
 	}

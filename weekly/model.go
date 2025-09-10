@@ -62,9 +62,9 @@ type expenseResponse struct {
 }
 
 type expenseRemaining struct {
-	Weekday  dataLabel `json:"weekday"`
-	Saturday dataLabel `json:"saturday"`
-	Sunday   dataLabel `json:"sunday"`
+	Weekday  common.DataLabel `json:"weekday"`
+	Saturday common.DataLabel `json:"saturday"`
+	Sunday   common.DataLabel `json:"sunday"`
 	Days     struct {
 		Senin  string `json:"Senin"`
 		Selasa string `json:"Selasa"`
@@ -85,25 +85,6 @@ type expenseDetail struct {
 	Time   string `json:"time"`
 }
 
-type dataLabel struct {
-	Label      string `json:"label"`
-	LabelColor string `json:"label_color,omitempty"`
-}
-
-func toDataLabel(remaining int64, isDone bool) dataLabel {
-	labelColor := ""
-	if isDone {
-		labelColor = "green"
-	}
-	if remaining < 0 {
-		labelColor = "red"
-	}
-	return dataLabel{
-		Label:      common.FormatRupiah(remaining),
-		LabelColor: labelColor,
-	}
-}
-
 type AddRequest struct {
 	Amount int64   `json:"amount"`
 	Date   *string `json:"date"`
@@ -122,4 +103,27 @@ func (r *AddRequest) ToExpense(weekData WeekData, t time.Time) Expense {
 		Note:        r.Note,
 		CreatedTime: t,
 	}
+}
+
+type WeeklySummary struct {
+	Year   int   `db:"year"`
+	Week   int   `db:"week"`
+	Amount int64 `db:"amount"`
+}
+
+type WeeklySummaries []WeeklySummary
+
+func (ws WeeklySummaries) ToRecapResponse() (recaps []RecapResp) {
+	for _, w := range ws {
+		recaps = append(recaps, RecapResp{
+			Amount:    w.Amount,
+			Remaining: (2 * MaxExpense) - w.Amount,
+		})
+	}
+	return
+}
+
+type RecapResp struct {
+	Amount    int64
+	Remaining int64
 }

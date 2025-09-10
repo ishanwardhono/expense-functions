@@ -3,11 +3,12 @@ package weekly
 import (
 	"fmt"
 	"time"
-
-	"github.com/ishanwardhono/expense-function/common"
 )
 
-const GaAdaJajanLabel = "Ga ada jajan"
+const (
+	MaxExpense      = 500000
+	GaAdaJajanLabel = "Ga ada jajan"
+)
 
 var mapDayLabel = map[int]string{
 	0: "Senin",
@@ -17,10 +18,6 @@ var mapDayLabel = map[int]string{
 	4: "Jumat",
 	5: "Sabtu",
 	6: "Minggu",
-}
-
-func now() time.Time {
-	return common.Now()
 }
 
 func getWeekData(t time.Time) WeekData {

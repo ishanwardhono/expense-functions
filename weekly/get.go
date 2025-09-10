@@ -4,29 +4,30 @@ import (
 	"context"
 
 	"github.com/ishanwardhono/expense-function/common"
+	"github.com/jmoiron/sqlx"
 )
 
 func Get(ctx context.Context) (expenseResponse, error) {
 	resp := expenseResponse{}
 
-	cfg, err := loadConfig()
+	cfg, err := common.LoadConfig()
 	if err != nil {
 		return resp, err
 	}
 
-	db, err := connectDatabase(cfg)
+	db, err := common.ConnectDatabase(cfg.DbConfig)
 	if err != nil {
 		return resp, err
 	}
 	defer db.Close()
 
-	weekData := getWeekData(cfg.time)
-	expenses, err := getCurrentWeekExpense(ctx, db, weekData)
+	weekData := getWeekData(cfg.Time)
+	expenses, err := getCurrentWeekExpense(ctx, db, weekData.year, weekData.week)
 	if err != nil {
 		return resp, err
 	}
 
-	remaining := calculateRemainingExpense(weekData.day, expenses, cfg.maxExpense)
+	remaining := calculateRemainingExpense(weekData.day, expenses, MaxExpense)
 	return expenseResponse{
 		Year:      weekData.year,
 		Week:      weekData.week,
@@ -43,9 +44,9 @@ func calculateRemainingExpense(day int, expenses Expenses, maxExpense int64) exp
 	sundayRemaining := (maxExpense / 2) - sundayExpense
 
 	response := expenseRemaining{
-		Weekday:  toDataLabel(weekdayRemaining, day >= 5),
-		Saturday: toDataLabel(saturdayRemaining, day >= 6),
-		Sunday:   toDataLabel(sundayRemaining, false),
+		Weekday:  common.ToDataLabel(weekdayRemaining, day >= 5),
+		Saturday: common.ToDataLabel(saturdayRemaining, day >= 6),
+		Sunday:   common.ToDataLabel(sundayRemaining, false),
 		Details:  expenses.ToDetailsResponse(),
 	}
 
@@ -81,4 +82,13 @@ func (r *expenseRemaining) weekendExpense(day int, saturdayRemaining, sundayRema
 		r.Days.Sabtu = common.FormatRupiah(saturdayRemaining)
 	}
 	r.Days.Minggu = common.FormatRupiah(sundayRemaining)
+}
+
+func Recapitulation(ctx context.Context, db *sqlx.DB, startYear, startWeek, endYear, endWeek int) ([]RecapResp, error) {
+	weeklyRecaps, err := getSumWeekExpense(ctx, db, startYear, startWeek, endYear, endWeek)
+	if err != nil {
+		return nil, err
+	}
+
+	return weeklyRecaps.ToRecapResponse(), nil
 }

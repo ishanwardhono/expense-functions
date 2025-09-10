@@ -50,8 +50,8 @@ type expenseResponse struct {
 }
 
 type expenseRemaining struct {
-	Total   dataLabel       `json:"total"`
-	Details []expenseDetail `json:"details"`
+	Total   common.DataLabel `json:"total"`
+	Details []expenseDetail  `json:"details"`
 }
 
 type expenseDetail struct {
@@ -59,22 +59,6 @@ type expenseDetail struct {
 	Type   string `json:"type"`
 	Note   string `json:"note"`
 	Time   string `json:"time"`
-}
-
-type dataLabel struct {
-	Label      string `json:"label"`
-	LabelColor string `json:"label_color,omitempty"`
-}
-
-func toDataLabel(remaining int64) dataLabel {
-	labelColor := ""
-	if remaining < 0 {
-		labelColor = "red"
-	}
-	return dataLabel{
-		Label:      common.FormatRupiah(remaining),
-		LabelColor: labelColor,
-	}
 }
 
 type AddRequest struct {
@@ -94,4 +78,17 @@ func (r *AddRequest) ToMonthlyExpense(monthData monthData, t time.Time) MonthlyE
 		Note:        r.Note,
 		CreatedTime: t,
 	}
+}
+
+type RecapResp struct {
+	Year       int
+	Month      int
+	MonthLabel string
+	Amount     int64
+	Remaining  int64
+	TotalWeeks int
+	StartYear  int
+	EndYear    int
+	StartWeek  int
+	EndWeek    int
 }

@@ -1,0 +1,12 @@
+# Docker
+.env
+Dockerfile.local
+docker-compose.override.yml
+
+# Build artifacts
+main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib

@@ -3,26 +3,24 @@ package common
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 )
 
-func LoadMaxExpense() (int64, error) {
-	maxExpenseStr := os.Getenv("MAX_EXPENSE")
-	maxExpense, err := strconv.ParseInt(maxExpenseStr, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid MAX_EXPENSE environment variable: %v", err)
-	}
-	return maxExpense, nil
+type config struct {
+	Time     time.Time
+	DbConfig *DatabaseConfig
 }
 
-func LoadMaxMonthlyExpense() (int64, error) {
-	maxMonthlyExpenseStr := os.Getenv("MAX_MONTHLY_EXPENSE")
-	maxMonthlyExpense, err := strconv.ParseInt(maxMonthlyExpenseStr, 10, 64)
+func LoadConfig() (*config, error) {
+	t, err := LoadTime()
 	if err != nil {
-		return 0, fmt.Errorf("invalid MAX_MONTHLY_EXPENSE environment variable: %v", err)
+		return nil, err
 	}
-	return maxMonthlyExpense, nil
+
+	return &config{
+		Time:     t,
+		DbConfig: LoadDatabaseConfig(),
+	}, nil
 }
 
 func LoadTime() (time.Time, error) {
