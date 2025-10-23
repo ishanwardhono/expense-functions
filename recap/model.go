@@ -2,6 +2,7 @@ package recap
 
 import (
 	"github.com/ishanwardhono/expense-function/common"
+	"github.com/ishanwardhono/expense-function/weekly"
 )
 
 const (
@@ -23,8 +24,8 @@ type RecapData struct {
 func EmptyRecapData(desc string) RecapData {
 	return RecapData{
 		Description: desc,
-		Amount:      "-",
-		Remaining:   common.DataLabel{Label: "-"},
+		Amount:      common.FormatRupiah(0),
+		Remaining:   common.DataLabel{Label: common.FormatRupiah(weekly.MaxExpense * 2)},
 	}
 }
 

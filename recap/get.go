@@ -47,6 +47,7 @@ func toRecapResponse(monthRecap monthly.RecapResp, weekRecap []weekly.RecapResp)
 
 	for i := 0; i < monthRecap.TotalWeeks; i++ {
 		if i >= len(weekRecap) {
+			remaining += weekly.MaxExpense * 2
 			recapData = append(recapData, EmptyRecapData(fmt.Sprintf("Minggu ke-%d", i+1)))
 			continue
 		}
