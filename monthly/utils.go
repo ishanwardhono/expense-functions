@@ -122,7 +122,7 @@ func getLastMondayBefore(date time.Time) time.Time {
 
 	// Calculate days to subtract to get to previous Monday
 	daysToSubtract := int(weekday) - int(time.Monday)
-	if daysToSubtract <= 0 {
+	if daysToSubtract < 0 {
 		daysToSubtract += 7
 	}
 
