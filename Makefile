@@ -1,6 +1,6 @@
 #ex: make run func=HelloGet
 run:
-	@export $$(cat .env | xargs) && FUNCTION_TARGET=$(func) PORT=$(port) TIME=$(time) go run cmd/main.go
+	@export $$(grep -v '^\s*#' .env | grep -v '^\s*$$' | xargs) && FUNCTION_TARGET=$(func) PORT=$(port) TIME=$(time) go run cmd/main.go
 
 run-weekly-get:
 	@make run func=WeeklyGet port=8199
