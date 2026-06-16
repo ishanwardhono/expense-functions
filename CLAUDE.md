@@ -75,7 +75,8 @@ The `internal/envelope` engine knows nothing about HTTP, the DB, or versioning �
 
 ## Conventions
 
-- Errors surface as non-2xx JSON `{"error":"message"}` (current `base.go`; preserved in `internal/platform/httpx`).
+- Errors surface as non-2xx JSON `{"error":"message"}` with **typed errors mapped to status** — 409 conflict (duplicate sub payment), 400 validation, 404 not found, 500 default (spec §4.3). `base.go` currently returns 500 for everything; `internal/platform/httpx` + `apierr` add the mapping.
+- Dates/times: stored as SQL `DATE` + `TIME` (Asia/Jakarta); the API returns `occurred_at` as **RFC3339** and the client formats for display.
 - `sqlx` with `db:"col"` struct tags; every DB function takes `context.Context` first; parameterized queries only.
 - Money is integer Rupiah (`INT8`). `gen_random_uuid()` primary keys.
 - `debug.go` is gitignored (local-only scratch).

@@ -1,3 +1,5 @@
+<!-- STALE: describes the v1 model. The v2 rewrite is authoritative in /CLAUDE.md and docs/superpowers/specs/2026-06-15-amplop-v2-backend-design.md. This file is updated at Phase 4. -->
+
 # GitHub Copilot Custom Instructions for Expense Function
 
 ## Project Overview

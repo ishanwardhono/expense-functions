@@ -40,6 +40,7 @@ In the prototype all math runs client-side over `localStorage`. The backend beco
 | D5 | Deployment shape? | **One HTTP function with an internal REST router.** Fallback: one-function-per-operation if separate URLs are required. |
 | D6 | Subscription payments storage? | **As expenses.** Single transactions table; a Langganan expense carries `subscription_id` (the "subcategory"). No payment table, no pay/unpay endpoints. **One payment per subscription per month.** |
 | D7 | Per-month history of budgets/subscriptions? | **Effective-dated rows.** A new version is stored only when something changes, stamped with an effective `(year, month)`. Reads use the latest version with effective month ≤ viewed month. Writes are effective from the **current** month. |
+| D8 | Budget config baseline month? | **Locked at `2025-01`.** A fixed lower bound ≤ any month that will ever be viewed; with no v1 migration nothing earlier exists. Changing it after the migration is applied needs a follow-up migration. |
 
 ### Carried over from the current repo (assumptions)
 - Go + GCP Functions Framework (`functions-framework-go`); local dev via `cmd/main.go`.
@@ -81,6 +82,7 @@ internal/
     config/      env config (DB, TIME override, tz)
     database/    CockroachDB connection (sqlx), helpers
     httpx/       router, base handler, CORS, JSON encode, error→HTTP mapping
+    apierr/      typed errors (Invalid/NotFound/Conflict) — see §4.3
     timeutil/    Asia/Jakarta location, Now(), current-month helper, date helpers
   envelope/
     rules.go         EnvelopeOf(category, date), categories, envelope ids/labels
@@ -104,9 +106,24 @@ docs/superpowers/specs/2026-06-15-amplop-v2-backend-design.md   # this file
 **Removed:** `weekly/`, `monthly/`, `recap/`, `hello/`, the v1 `handler.go` targets, `data/ddl.sql`. `common/` is refactored into `internal/platform/*`.
 
 ### 4.2 Deployment
-One Cloud Function target `Expense` exposing a small method+path router; shared middleware: CORS preflight, JSON, panic recovery, error→status mapping (`{"error":"..."}` body, preserving `base.go`). Local dev keeps the Makefile pattern (`FUNCTION_TARGET=Expense PORT=… go run cmd/main.go`); the existing `.env` comment-stripping fix is preserved.
+One Cloud Function target `Expense` exposing a small method+path router; shared middleware: CORS preflight, JSON, panic recovery, error→status mapping (§4.3). Local dev keeps the Makefile pattern (`FUNCTION_TARGET=Expense PORT=… go run cmd/main.go`); the existing `.env` comment-stripping fix is preserved.
 
 > Fallback (D5): the same `service` layer can be exposed as multiple `functions.HTTP(...)` registrations with no business-logic change.
+
+### 4.3 Error → HTTP mapping
+`internal/platform/httpx` maps **typed errors** (from `internal/platform/apierr`) to status codes; the body is always `{"error":"message"}`. Services return these typed errors; handlers stay thin.
+
+| Constructor | HTTP | Used for |
+|-------------|------|----------|
+| `apierr.Invalid(msg)`  | **400** | validation failure, malformed JSON, bad query params |
+| `apierr.NotFound(msg)` | **404** | unknown id |
+| `apierr.Conflict(msg)` | **409** | duplicate subscription payment (once-per-month) |
+| *(any other error)*    | **500** | unexpected |
+
+The mapper uses `errors.As` on sentinel/typed errors; JSON-decode failures map to 400. This replaces `base.go`'s current "500 for everything" `handleError`.
+
+### 4.4 Rollout — no phased production cutover
+The app is used **only after the rewrite is complete**, so there is **no parallel-run, downtime, or data-transition concern**. v1 packages are deleted in Phase 0 freely, and the `Expense` function is deployed to production only at **Phase 4**. No v1 data is migrated (D4), so deleting the legacy tables/packages is safe.
 
 ---
 
@@ -130,6 +147,7 @@ CREATE TABLE IF NOT EXISTS amplop.subscription (
 -- Subscriptions: effective-dated attributes ---------------------------------
 -- A version applies from (effective_year, effective_month) onward until the
 -- next version. "active=false" ends the subscription as of that month.
+-- The UNIQUE constraint below doubles as the index for §5.1 resolution.
 CREATE TABLE IF NOT EXISTS amplop.subscription_version (
     id              UUID        NOT NULL DEFAULT gen_random_uuid(),
     subscription_id UUID        NOT NULL REFERENCES amplop.subscription (id) ON DELETE CASCADE,
@@ -151,7 +169,7 @@ CREATE TABLE IF NOT EXISTS amplop.subscription_version (
 CREATE TABLE IF NOT EXISTS amplop.expense (
     id              UUID        NOT NULL DEFAULT gen_random_uuid(),
     occurred_date   DATE        NOT NULL,
-    occurred_time   TIME        NULL,             -- "HH:MM"; nullable
+    occurred_time   TIME        NULL,             -- stored as SQL TIME; serialized as RFC3339 (§7.2)
     amount          INT8        NOT NULL,         -- Rupiah, > 0
     category        STRING      NOT NULL,         -- Makan|Belanja|Jajan|Cash|Lainnya|Langganan
     subscription_id UUID        NULL REFERENCES amplop.subscription (id),  -- "subcategory"; set iff Langganan
@@ -180,6 +198,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS expense_one_sub_payment_per_month
     WHERE subscription_id IS NOT NULL;
 
 -- Budget config: effective-dated --------------------------------------------
+-- The UNIQUE constraint doubles as the index for §5.1 resolution.
 CREATE TABLE IF NOT EXISTS amplop.budget_config (
     id              UUID        NOT NULL DEFAULT gen_random_uuid(),
     effective_year  INT2        NOT NULL,
@@ -194,32 +213,35 @@ CREATE TABLE IF NOT EXISTS amplop.budget_config (
     CONSTRAINT budget_config_effective_uniq UNIQUE (effective_year, effective_month)
 );
 
--- Baseline so every viewable month resolves (defaults from prototype CFG).
+-- Baseline (D8): locked at 2025-01 so every viewable month resolves; defaults
+-- from the prototype CFG.
 INSERT INTO amplop.budget_config (effective_year, effective_month, monthly, shop_weekly, weekend_budget)
 VALUES (2025, 1, 5000000, 600000, 200000)
 ON CONFLICT (effective_year, effective_month) DO NOTHING;
 ```
 
 **Notes**
-- `expense.subscription_id` is the "subcategory" link; the CHECK enforces *Langganan ⇔ subscription_id present*. A subscription can be paid **at most once per calendar month** — enforced by the unique partial index `expense_one_sub_payment_per_month` (on the generated `occurred_year`/`occurred_month`) **and** by a service-layer pre-check that returns a friendly error. The client additionally disables already-paid subscriptions on the add-expense screen, but the backend is the authority.
+- `expense.subscription_id` is the "subcategory" link; the CHECK enforces *Langganan ⇔ subscription_id present*. A subscription can be paid **at most once per calendar month** — enforced by the unique partial index `expense_one_sub_payment_per_month` (on the generated `occurred_year`/`occurred_month`) **and** by a service-layer pre-check that returns a friendly 409. The client additionally disables already-paid subscriptions on the add-expense screen, but the backend is the authority.
 - `occurred_year` / `occurred_month` are STORED generated columns derived from `occurred_date`; they back the once-per-month index and the calendar-month queries (langganan/flex). Editing `occurred_date` re-derives them automatically.
-- Subscription **name/color** live on the identity row (cosmetic, not versioned). **alloc/due_day/active** live on `subscription_version` (effective-dated). Ending a subscription = a version with `active=false` from the current month.
-- Budget config baseline is seeded at `2025-01` with the prototype defaults (`5,000,000 / 600,000 / 200,000`); pick whatever baseline ≤ the earliest viewable month.
-- `occurred_date` + nullable `occurred_time` keep the date-keyed envelope math unambiguous and match the form (date/time edited independently).
+- `occurred_time` is stored as SQL `TIME`; the API serializes the transaction instant as **RFC3339** (`occurred_at`) and the client formats it for display (§7.2). Storage stays SQL `TIME` per decision.
+- Subscription **name/color** live on the identity row (cosmetic, not versioned). **alloc/due_day/active** live on `subscription_version` (effective-dated). Ending a subscription = a version with `active=false` from the current month. (`due_day` is informational for the "jatuh tempo" hint; values past a given month's length are clamped for display by the client.)
+- The `UNIQUE (effective_year, effective_month)` and `UNIQUE (subscription_id, effective_year, effective_month)` constraints **double as the indexes** for §5.1 resolution — no separate indexes needed.
+- Budget config baseline is **locked at `2025-01`** (D8) with the prototype defaults (`5,000,000 / 600,000 / 200,000`).
 
 ### 5.1 Effective-date resolution (the read rule)
-For a viewed month `(Y, M)`, the "in force" version is the one with the greatest `effective_year*12 + effective_month` that is `≤ Y*12 + M`.
+For a viewed month `(Y, M)`, the "in force" version is the one with the greatest `(effective_year, effective_month)` (lexicographic) that is `≤ (Y, M)`. The queries use a **plain range predicate** (not `year*12+month` arithmetic) so CockroachDB can use the `(effective_year, effective_month)` index that the §5 `UNIQUE` constraints already provide.
 
 Budget config:
 ```sql
 SELECT monthly, shop_weekly, weekend_budget
 FROM amplop.budget_config
-WHERE effective_year*12 + effective_month <= $Y*12 + $M
-ORDER BY effective_year*12 + effective_month DESC
+WHERE effective_year < $Y
+   OR (effective_year = $Y AND effective_month <= $M)
+ORDER BY effective_year DESC, effective_month DESC
 LIMIT 1;
 ```
 
-Subscription set (latest version per subscription, only those active):
+Subscription set (latest version per subscription, active only — seeks `subscription_version_uniq`):
 ```sql
 SELECT s.id, s.name, s.color, v.alloc, v.due_day
 FROM amplop.subscription s
@@ -227,13 +249,14 @@ JOIN LATERAL (
     SELECT alloc, due_day, active
     FROM amplop.subscription_version v
     WHERE v.subscription_id = s.id
-      AND v.effective_year*12 + v.effective_month <= $Y*12 + $M
-    ORDER BY v.effective_year*12 + v.effective_month DESC
+      AND (v.effective_year < $Y
+           OR (v.effective_year = $Y AND v.effective_month <= $M))
+    ORDER BY v.effective_year DESC, v.effective_month DESC
     LIMIT 1
 ) v ON true
 WHERE v.active = true;
 ```
-A subscription created later (its earliest version > M) has no version ≤ M and is correctly absent from earlier months.
+A subscription created later (its earliest version > `(Y,M)`) has no version ≤ the month and is correctly absent from earlier months.
 
 ### 5.2 Effective-date writes (the change rule)
 Writes are stamped with the **current** Asia/Jakarta `(year, month)`:
@@ -266,8 +289,10 @@ Operates on the **already-resolved** month context (config + subscription set pa
 
 **Consequence to preserve:** a transaction's calendar date can sit in month *M* (shown in *M*'s day list/calendar) while its `belanja`/`weekend` envelope is counted in *M−1*/*M+1* (its week's Friday/Saturday belongs to a neighbor). Day-level "sisa belanja"/"sisa wknd" minis appear only when the day's week/weekend is one of the viewed month's weeks.
 
+**Query window (read range):** because weeks/weekends can begin or end in adjacent months, the `month` service must load expenses over a window **wider than the calendar month** — a safe superset is `[firstOfMonth − 7 days, lastOfMonth + 7 days]` (covers `firstFriday − 4 … lastSaturday + 1`); the engine then attributes precisely. Querying only `occurred_date BETWEEN first_of_month AND last_of_month` would miss cross-boundary belanja/weekend expenses. (Langganan/flex sums and the calendar grid still use the in-month range.) The expense repo's month query and the `month` service must make this window explicit in their signatures.
+
 ### 6.3 `ComputeMonth(...) → MonthResult`
-Inputs: expenses (date, amount, category) for the relevant range, **resolved config** (monthly, shopWeekly, weekendBudget), **resolved subscription set** (alloc per sub), year, month, today.
+Inputs: expenses (date, amount, category) **for the read window (§6.2)**, **resolved config** (monthly, shopWeekly, weekendBudget), **resolved subscription set** (alloc per sub), year, month, today.
 
 - `weeks[]`: `{ friday, monday, sunday, budget=shopWeekly, spent, left, state }`, `spent` = Σ expenses `EnvelopeOf==belanja` with `monday ≤ date ≤ sunday`.
 - `weekends[]`: `{ saturday, sunday, budget=weekendBudget, spent, left, state }`, `spent` = Σ expenses `EnvelopeOf==weekend` with `date ∈ {saturday, sunday}`.
@@ -293,7 +318,7 @@ For each resolved subscription, derive from this month's single Langganan expens
 
 ## 7. API contract
 
-One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}`. `year`/`month` query params default to the current Asia/Jakarta month.
+One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per the §4.3 mapping. `year`/`month` query params default to the current Asia/Jakarta month.
 
 ### 7.1 Read — month dashboard
 `GET /month?year=YYYY&month=MM` → resolves the effective config + subscription set for the month, runs the engine, and returns one payload:
@@ -322,12 +347,12 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}`. `y
   ],
   "days": {
     "2026-06-01": [
-      { "id": "…", "date": "2026-06-01", "time": "12:10", "amount": 18000,
+      { "id": "…", "date": "2026-06-01", "occurred_at": "2026-06-01T12:10:00+07:00", "amount": 18000,
         "category": "Makan", "subscription_id": null, "note": "Nasi padang",
         "envelope": { "id": "belanja", "label": "BLNJ" } }
     ],
     "2026-06-05": [
-      { "id": "…", "date": "2026-06-05", "time": "09:00", "amount": 186000,
+      { "id": "…", "date": "2026-06-05", "occurred_at": "2026-06-05T09:00:00+07:00", "amount": 186000,
         "category": "Langganan", "subscription_id": "…", "note": "Netflix",
         "envelope": { "id": "langganan", "label": "SUBS" } }
     ]
@@ -339,13 +364,14 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}`. `y
 }
 ```
 
-`days` now includes Langganan expenses as ordinary rows (no injection). `subscriptions[].paid` is derived from this month's Langganan expense linked to each subscription (at most one).
+`days` includes Langganan expenses as ordinary rows (no injection). Each expense carries `date` (the day-group key) and `occurred_at` (RFC3339; see §7.2). `subscriptions[].paid` is derived from this month's Langganan expense linked to each subscription (at most one).
 
 ### 7.2 Write — expenses (incl. subscription payments)
 - `POST /expenses` `{ date, time?, amount, category, subscription_id?, note? }` → created. `subscription_id` **required iff** `category=="Langganan"` (and must reference an existing subscription); must be null otherwise.
 - `PUT /expenses/{id}` `{ date, time?, amount, category, subscription_id?, note? }` → updated (same rule).
 - `DELETE /expenses/{id}` → 204.
 - A Langganan expense must be **unique per `(subscription_id, calendar month)`**; a conflicting create/update returns **409 Conflict** `{"error":"subscription already paid this month"}`. Updates exclude the row itself; moving the date or subscription re-checks the target month.
+- **Time on the wire:** requests send `date` (`YYYY-MM-DD`) + optional `time` (`HH:MM`), stored as SQL `DATE` + `TIME`. Responses return **`occurred_at` as RFC3339** (Asia/Jakarta offset, e.g. `2026-06-01T12:10:00+07:00`; midnight when no time). The client formats it for display.
 
 ### 7.3 Write — subscription definitions (effective-dated)
 - `GET /subscriptions?year=&month=` → resolved subscription set for that month (default current).
@@ -362,22 +388,23 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}`. `y
 ### 7.5 Validation (service layer)
 - `amount` integer > 0; `category` ∈ allowed set; `date` `YYYY-MM-DD`; `time` `HH:MM` or omitted.
 - `category=="Langganan"` ⇒ `subscription_id` present + references an existing subscription; otherwise `subscription_id` must be null.
-- `category=="Langganan"` ⇒ at most one such expense per `(subscription_id, calendar month)` — service pre-check (excluding the current row on update) **plus** graceful handling of the DB unique-index violation as a backstop; conflict ⇒ **409**.
+- `category=="Langganan"` ⇒ at most one such expense per `(subscription_id, calendar month)` — service pre-check (excluding the current row on update) **plus** graceful handling of the DB unique-index violation as a backstop.
 - Subscription `alloc` > 0; `due_day` 1–31; `name` non-empty.
 - Budget values ≥ 0.
+- **Status codes (§4.3):** validation/bad input ⇒ **400**, unknown id ⇒ **404**, once-per-month conflict ⇒ **409**.
 
 ---
 
 ## 8. Implementation phases (next-session plan)
 
-Each phase ends green (compiles, tests pass). TDD for the engine and the effective-date resolution.
+Each phase ends green (compiles, tests pass). TDD for the engine and the effective-date resolution. No production deploy until Phase 4 (§4.4).
 
 ### Phase 0 — Scaffold
-- [ ] `internal/platform/{config,database,httpx,timeutil}` (port from `common/`); add current-month helper honoring `TIME`.
-- [ ] `migrations/0001_init_amplop.sql` (all tables + the once-per-month unique partial index in §5); document applying to `devdb` (local) and `defaultdb` (prod).
-- [ ] `function.go` registering `Expense` + router with CORS/JSON/error middleware (ported from `base.go`).
+- [ ] `internal/platform/{config,database,httpx,apierr,timeutil}` (port from `common/`); add current-month helper honoring `TIME`; typed errors + error→status mapping (§4.3).
+- [ ] `migrations/0001_init_amplop.sql` (all tables + the once-per-month unique partial index + the `2025-01` baseline in §5); document applying to `devdb` (local) and `defaultdb` (prod).
+- [ ] `function.go` registering `Expense` + router with CORS/JSON/error middleware.
 - [ ] Update `cmd/main.go`/Makefile/docker-compose to the single `Expense` target.
-- [ ] Delete v1 packages + `data/ddl.sql`. Build stays green.
+- [ ] Delete v1 packages + `data/ddl.sql` (safe — no rollout concern, §4.4). Build stays green.
 
 ### Phase 1 — Envelope engine (TDD, pure)
 - [ ] `rules.go`: categories (incl. `Langganan`), envelope ids/labels, `EnvelopeOf`.
@@ -385,19 +412,19 @@ Each phase ends green (compiles, tests pass). TDD for the engine and the effecti
 - [ ] `engine_test.go`: June-2026 seed reproduction + boundary cases (week owned by Friday across month edges; weekend by Saturday; flex/langganan by calendar month; transaction visible in *M* but counted in a neighbor's envelope; negative `left`/`flexBudget`; empty month; Langganan attribution).
 
 ### Phase 2 — Persistence + effective-date resolution
-- [ ] Repos: `expense` (incl. `subscription_id`, month-range + per-sub Langganan queries), `subscription` + `subscription_version`, `budget_config`.
-- [ ] Resolution queries (§5.1) for config and subscription set; upsert writes (§5.2).
+- [ ] Repos: `expense` (incl. `subscription_id`, **wide boundary-window month query (§6.2)** + per-sub Langganan queries), `subscription` + `subscription_version`, `budget_config`.
+- [ ] Resolution queries (§5.1, range-predicate form) for config and subscription set; upsert writes (§5.2).
 - [ ] Integration tests against local `devdb`, including: effective-dating (a change in month X is frozen for X−1 and applies X→forward; subscription created later is absent from earlier months; soft-end keeps past months) **and** the once-per-month unique partial index rejecting a duplicate Langganan payment.
 
 ### Phase 3 — Services + HTTP
 - [ ] Services with validation: expenses (Langganan/subscription_id rule **and the once-per-month payment rule** — service pre-check + graceful unique-violation handling → 409), subscriptions, budget; writing effective-from-current-month versions.
-- [ ] `month` service: resolve config + subs → run engine → assemble §7.1 payload (incl. derived `subscriptions[].paid`).
-- [ ] Handlers + route wiring for all §7 endpoints; handler tests (happy + validation, incl. duplicate-payment 409) with `TIME` pinned.
+- [ ] `month` service: resolve config + subs → load expenses over the wide window → run engine → assemble §7.1 payload (incl. derived `subscriptions[].paid` and `occurred_at`).
+- [ ] Handlers + route wiring for all §7 endpoints; **error→status mapping per §4.3**; handler tests (happy + validation 400, duplicate-payment 409, unknown-id 404) with `TIME` pinned.
 
 ### Phase 4 — Run & deploy
 - [ ] Verify local run (Makefile target, docker-compose service).
-- [ ] Deploy notes for the single `Expense` Cloud Function; env vars; CORS.
-- [ ] Update `README` / copilot-instructions to the new structure.
+- [ ] Deploy notes for the single `Expense` Cloud Function; env vars; CORS. First production deploy happens here (§4.4).
+- [ ] Update `README` / `.github/copilot-instructions.md` to the new structure.
 
 ### Phase 5 — AI scan import (deferred; see §9)
 
@@ -413,22 +440,23 @@ Interface sketch only.
 
 ## 10. Testing strategy
 - **Engine:** pure unit tests, deterministic via injected "today"; mirror prototype outputs for the June-2026 seed; cover Langganan + boundaries.
-- **Resolution + repos:** integration tests on `devdb` (CockroachDB) for effective-dating semantics.
+- **Resolution + repos:** integration tests on `devdb` (CockroachDB) for effective-dating semantics and the wide month-window query.
 - **Once-per-month payment:** unit-test the service pre-check (incl. update excluding self, and moving date/subscription into an occupied month) and an integration test asserting the DB unique partial index rejects a duplicate → surfaced as 409.
-- **Services/handlers:** validation + error mapping; `TIME` pins "now" (and the current month for writes).
+- **Services/handlers:** validation + error→status mapping (400/404/409); `TIME` pins "now" (and the current month for writes).
 - CI green per phase.
 
 ---
 
 ## 11. Open items (with defaults)
-1. **Legacy tables**: leave `public.expense` / `public.monthly_expense` untouched; drop after v2 is live. *(Default: leave.)*
+1. **Legacy tables**: leave `public.expense` / `public.monthly_expense` untouched; drop after v2 is live (no rollout risk, §4.4). *(Default: leave.)*
 2. **Endpoint shape**: single rich `GET /month` + granular writes. *(Default: yes.)*
 3. **Deploy granularity**: single routed `Expense` function. *(Default: D5.)*
 4. **Effective-from for writes**: current month only (no future-dating). *(Default; revisit if planning ahead is wanted.)*
 5. **Name/color versioning**: not versioned (cosmetic). *(Default; move to `subscription_version` if historical names matter.)*
 6. **One Langganan payment per sub per month**: enforced (unique partial index + service pre-check → 409). Client also disables already-paid subscriptions on the add-expense screen; backend is the authority. *(Locked per user.)*
-7. **Budget baseline month**: seeded at `2025-01`. *(Adjust to the earliest month you'll ever view.)*
-8. **Paying a subscription in a month where it isn't effective/active**: not blocked — only the subscription identity must exist. *(Default: allow; add a check if you want payments restricted to active months.)*
+7. **Paying a subscription in a month where it isn't effective/active**: not blocked — only the subscription identity must exist. *(Default: allow; add a check if you want payments restricted to active months.)*
+
+> Resolved during review: budget baseline month is now **locked (D8)**; error→status mapping is specified (§4.3); the month read window is specified (§6.2); no production rollout concern (§4.4).
 
 ---
 
