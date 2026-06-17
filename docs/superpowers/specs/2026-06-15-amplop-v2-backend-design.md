@@ -229,14 +229,13 @@ ON CONFLICT (effective_year, effective_month) DO NOTHING;
 - Budget config baseline is **locked at `2025-01`** (D8) with the prototype defaults (`5,000,000 / 600,000 / 200,000`).
 
 ### 5.1 Effective-date resolution (the read rule)
-For a viewed month `(Y, M)`, the "in force" version is the one with the greatest `(effective_year, effective_month)` (lexicographic) that is `≤ (Y, M)`. The queries use a **plain range predicate** (not `year*12+month` arithmetic) so CockroachDB can use the `(effective_year, effective_month)` index that the §5 `UNIQUE` constraints already provide.
+For a viewed month `(Y, M)`, the "in force" version is the one with the greatest `(effective_year, effective_month)` (lexicographic) that is `≤ (Y, M)`. The queries use a **tuple (row-value) comparison** — `(effective_year, effective_month) <= ($Y, $M)` — which CockroachDB maps to a single contiguous range scan on the `(effective_year, effective_month)` index that the §5 `UNIQUE` constraints already provide. (Avoid `year*12+month` arithmetic, which would defeat the index.)
 
 Budget config:
 ```sql
 SELECT monthly, shop_weekly, weekend_budget
 FROM amplop.budget_config
-WHERE effective_year < $Y
-   OR (effective_year = $Y AND effective_month <= $M)
+WHERE (effective_year, effective_month) <= ($Y, $M)
 ORDER BY effective_year DESC, effective_month DESC
 LIMIT 1;
 ```
@@ -249,8 +248,7 @@ JOIN LATERAL (
     SELECT alloc, due_day, active
     FROM amplop.subscription_version v
     WHERE v.subscription_id = s.id
-      AND (v.effective_year < $Y
-           OR (v.effective_year = $Y AND v.effective_month <= $M))
+      AND (v.effective_year, v.effective_month) <= ($Y, $M)
     ORDER BY v.effective_year DESC, v.effective_month DESC
     LIMIT 1
 ) v ON true

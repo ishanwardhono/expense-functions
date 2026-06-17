@@ -14,7 +14,7 @@ The backend is being **completely rewritten** from the v1 model (`weekly/`, `mon
 
 **Do not extend the v1 packages.** They are legacy and will be deleted (Phase 0). New work goes under `internal/` per the spec's target layout. `.github/copilot-instructions.md` describes the *old* v1 design and is stale until Phase 4 updates it.
 
-### Locked v2 decisions (see spec §2 for rationale)
+### Locked v2 decisions (summary — spec §2 is authoritative; keep in sync when decisions change)
 - **Server computes** all envelope/budget math; the API returns render-ready data (integers; the client formats).
 - New **`amplop` schema** with fresh tables; **no migration** of v1 data. Leave legacy `public.expense` / `public.monthly_expense` untouched.
 - **One routed `Expense` Cloud Function** (method+path router) instead of one function per operation.
