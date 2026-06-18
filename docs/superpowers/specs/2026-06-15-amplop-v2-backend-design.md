@@ -398,21 +398,21 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
 Each phase ends green (compiles, tests pass). TDD for the engine and the effective-date resolution. No production deploy until Phase 4 (§4.4).
 
 ### Phase 0 — Scaffold
-- [ ] `internal/platform/{config,database,httpx,apierr,timeutil}` (port from `common/`); add current-month helper honoring `TIME`; typed errors + error→status mapping (§4.3).
-- [ ] `migrations/0001_init_amplop.sql` (all tables + the once-per-month unique partial index + the `2025-01` baseline in §5); document applying to `devdb` (local) and `defaultdb` (prod).
-- [ ] `function.go` registering `Expense` + router with CORS/JSON/error middleware.
-- [ ] Update `cmd/main.go`/Makefile/docker-compose to the single `Expense` target.
-- [ ] Delete v1 packages + `data/ddl.sql` (safe — no rollout concern, §4.4). Build stays green.
+- [x] `internal/platform/{config,database,httpx,apierr,timeutil}` (port from `common/`); add current-month helper honoring `TIME`; typed errors + error→status mapping (§4.3).
+- [x] `migrations/0001_init_amplop.sql` (all tables + the once-per-month unique partial index + the `2025-01` baseline in §5); document applying to `devdb` (local) and `defaultdb` (prod).
+- [x] `function.go` registering `Expense` + router with CORS/JSON/error middleware.
+- [x] Update `cmd/main.go`/Makefile/docker-compose to the single `Expense` target.
+- [x] Delete v1 packages + `data/ddl.sql` (safe — no rollout concern, §4.4). Build stays green.
 
 ### Phase 1 — Envelope engine (TDD, pure)
-- [ ] `rules.go`: categories (incl. `Langganan`), envelope ids/labels, `EnvelopeOf`.
-- [ ] `engine.go`: `dowsInMonth`, week/weekend construction, `ComputeMonth` (over resolved context), day helpers, per-sub status helper.
-- [ ] `engine_test.go`: June-2026 seed reproduction + boundary cases (week owned by Friday across month edges; weekend by Saturday; flex/langganan by calendar month; transaction visible in *M* but counted in a neighbor's envelope; negative `left`/`flexBudget`; empty month; Langganan attribution).
+- [x] `rules.go`: categories (incl. `Langganan`), envelope ids/labels, `EnvelopeOf`.
+- [x] `engine.go`: `dowsInMonth`, week/weekend construction, `ComputeMonth` (over resolved context), day helpers, per-sub status helper.
+- [x] `engine_test.go`: June-2026 seed reproduction + boundary cases (week owned by Friday across month edges; weekend by Saturday; flex/langganan by calendar month; transaction visible in *M* but counted in a neighbor's envelope; negative `left`/`flexBudget`; empty month; Langganan attribution).
 
 ### Phase 2 — Persistence + effective-date resolution
-- [ ] Repos: `expense` (incl. `subscription_id`, **wide boundary-window month query (§6.2)** + per-sub Langganan queries), `subscription` + `subscription_version`, `budget_config`.
-- [ ] Resolution queries (§5.1, range-predicate form) for config and subscription set; upsert writes (§5.2).
-- [ ] Integration tests against local `devdb`, including: effective-dating (a change in month X is frozen for X−1 and applies X→forward; subscription created later is absent from earlier months; soft-end keeps past months) **and** the once-per-month unique partial index rejecting a duplicate Langganan payment.
+- [x] Repos: `expense` (incl. `subscription_id`, **wide boundary-window month query (§6.2)** + per-sub Langganan queries), `subscription` + `subscription_version`, `budget_config`.
+- [x] Resolution queries (§5.1, range-predicate form) for config and subscription set; upsert writes (§5.2).
+- [x] Integration tests against local `devdb`, including: effective-dating (a change in month X is frozen for X−1 and applies X→forward; subscription created later is absent from earlier months; soft-end keeps past months) **and** the once-per-month unique partial index rejecting a duplicate Langganan payment.
 
 ### Phase 3 — Services + HTTP
 - [ ] Services with validation: expenses (Langganan/subscription_id rule **and the once-per-month payment rule** — service pre-check + graceful unique-violation handling → 409), subscriptions, budget; writing effective-from-current-month versions.
