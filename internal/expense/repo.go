@@ -33,12 +33,15 @@ func NewRepo(db *sqlx.DB) *Repo {
 // The envelope engine attributes each expense precisely; the wider query ensures
 // cross-boundary weeks and weekends are included.
 func (r *Repo) ForMonth(ctx context.Context, year, month int) ([]Expense, error) {
-	from := timeutil.FirstOfMonth(year, month).AddDate(0, 0, -7)
-	to := timeutil.LastOfMonth(year, month).AddDate(0, 0, 7)
+	// Format as YYYY-MM-DD strings and cast with ::date so the comparison is
+	// DATE-to-DATE, avoiding a timestamptz conversion whose result depends on the
+	// DB session timezone (midnight Jakarta ≠ midnight UTC).
+	from := timeutil.FirstOfMonth(year, month).AddDate(0, 0, -7).Format("2006-01-02")
+	to := timeutil.LastOfMonth(year, month).AddDate(0, 0, 7).Format("2006-01-02")
 	const q = `
 SELECT ` + selectCols + `
 FROM amplop.expense
-WHERE occurred_date >= $1 AND occurred_date <= $2
+WHERE occurred_date >= $1::date AND occurred_date <= $2::date
 ORDER BY occurred_date, occurred_time NULLS FIRST, created_at`
 	var out []Expense
 	if err := r.db.SelectContext(ctx, &out, q, from, to); err != nil {

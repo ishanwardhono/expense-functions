@@ -328,6 +328,7 @@ func TestUpdate_And_Delete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
+	t.Cleanup(func() { deleteExpenses(ctx, db, created.ID) })
 
 	// Update amount and note.
 	created.Amount = 35_000
