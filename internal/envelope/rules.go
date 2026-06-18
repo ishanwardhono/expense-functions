@@ -4,7 +4,11 @@
 // already-resolved config + subscription set for the month (spec §6).
 package envelope
 
-import "time"
+import (
+	"time"
+
+	"github.com/ishanwardhono/expense-function/internal/platform/timeutil"
+)
 
 // Category is an expense category.
 type Category string
@@ -44,8 +48,10 @@ func (e EnvelopeID) Label() string {
 }
 
 // isWeekend reports whether the date falls on Saturday or Sunday (Asia/Jakarta).
+// Normalizing to Loc keeps weekday classification consistent with dayNum's
+// date comparison even if a caller passes a timestamp in another zone.
 func isWeekend(date time.Time) bool {
-	wd := date.Weekday()
+	wd := date.In(timeutil.Loc).Weekday()
 	return wd == time.Saturday || wd == time.Sunday
 }
 

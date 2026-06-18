@@ -8,6 +8,7 @@ package timeutil
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"time"
 )
@@ -24,18 +25,11 @@ func mustLoadJakarta() *time.Location {
 	return loc
 }
 
-// Now returns the current instant in Asia/Jakarta, honoring the TIME override.
-// A malformed TIME falls back to the real clock.
-func Now() time.Time {
-	if t, err := parseTimeEnv(); err == nil {
-		return t
-	}
-	return time.Now().In(Loc)
-}
-
 // LoadTime returns "now" (Asia/Jakarta), overridden by the TIME env var
-// (RFC3339) when set. A malformed TIME is a hard error so misconfiguration in
-// tests/runs surfaces loudly.
+// (RFC3339) when set. A malformed TIME is a hard error so misconfiguration
+// surfaces loudly — config.Load() calls this at startup, failing fast.
+//
+// This is the single TIME parser; Now() reuses it.
 func LoadTime() (time.Time, error) {
 	if v := os.Getenv("TIME"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
@@ -47,16 +41,17 @@ func LoadTime() (time.Time, error) {
 	return time.Now().In(Loc), nil
 }
 
-func parseTimeEnv() (time.Time, error) {
-	v := os.Getenv("TIME")
-	if v == "" {
-		return time.Time{}, fmt.Errorf("TIME not set")
-	}
-	t, err := time.Parse(time.RFC3339, v)
+// Now returns the current instant in Asia/Jakarta, honoring the TIME override.
+// It reuses LoadTime; a malformed TIME is logged and falls back to the wall
+// clock. In practice startup validates TIME via config.Load(), so a running
+// process never reaches the fallback.
+func Now() time.Time {
+	t, err := LoadTime()
 	if err != nil {
-		return time.Time{}, err
+		log.Printf("timeutil: %v; falling back to wall clock", err)
+		return time.Now().In(Loc)
 	}
-	return t.In(Loc), nil
+	return t
 }
 
 // CurrentMonth returns the (year, month) of the given instant in Asia/Jakarta.

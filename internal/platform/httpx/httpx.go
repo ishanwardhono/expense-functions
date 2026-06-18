@@ -30,8 +30,14 @@ func WriteJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // WriteError maps an error to a status code and writes {"error":"message"}.
+// For unexpected (500) errors the real detail is logged server-side and only a
+// generic message is returned, so internals (DB driver text, SQL, etc.) are not
+// exposed to callers — relevant under CORS: *.
 func WriteError(w http.ResponseWriter, err error) {
 	status, msg := statusFor(err)
+	if status == http.StatusInternalServerError {
+		log.Printf("httpx: internal error: %v", err)
+	}
 	WriteJSON(w, status, map[string]string{"error": msg})
 }
 
@@ -48,7 +54,7 @@ func statusFor(err error) (int, string) {
 			return http.StatusConflict, ae.Message
 		}
 	}
-	return http.StatusInternalServerError, err.Error()
+	return http.StatusInternalServerError, "internal server error"
 }
 
 // Middleware wraps a HandlerFunc with CORS, panic recovery, and error mapping.
