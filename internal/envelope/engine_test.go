@@ -1,0 +1,310 @@
+package envelope
+
+import (
+	"testing"
+	"time"
+
+	"github.com/ishanwardhono/expense-function/internal/platform/timeutil"
+)
+
+func d(y, m, day int) time.Time { return timeutil.Date(y, m, day) }
+
+// ---- EnvelopeOf ----------------------------------------------------------
+
+func TestEnvelopeOf(t *testing.T) {
+	weekday := d(2026, 6, 1) // Monday
+	saturday := d(2026, 6, 6)
+	sunday := d(2026, 6, 7)
+
+	cases := []struct {
+		name string
+		cat  Category
+		date time.Time
+		want EnvelopeID
+	}{
+		{"Langganan any day", CatLangganan, weekday, EnvLangganan},
+		{"Langganan weekend", CatLangganan, saturday, EnvLangganan},
+		{"Belanja weekday", CatBelanja, weekday, EnvBelanja},
+		{"Belanja weekend", CatBelanja, saturday, EnvBelanja},
+		{"Cash weekday", CatCash, weekday, EnvBelanja},
+		{"Cash weekend", CatCash, sunday, EnvBelanja},
+		{"Makan weekday", CatMakan, weekday, EnvBelanja},
+		{"Makan saturday", CatMakan, saturday, EnvWeekend},
+		{"Makan sunday", CatMakan, sunday, EnvWeekend},
+		{"Jajan weekday", CatJajan, weekday, EnvBelanja},
+		{"Jajan weekend", CatJajan, saturday, EnvWeekend},
+		{"Lainnya weekday", CatLainnya, weekday, EnvFleksibel},
+		{"Lainnya saturday", CatLainnya, saturday, EnvWeekend},
+		{"Lainnya sunday", CatLainnya, sunday, EnvWeekend},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := EnvelopeOf(c.cat, c.date); got != c.want {
+				t.Fatalf("EnvelopeOf(%s, %s) = %s, want %s", c.cat, c.date.Format("2006-01-02"), got, c.want)
+			}
+		})
+	}
+}
+
+// ---- June 2026 seed reproduction (mirrors the prototype) -----------------
+
+// seedConfig and seedExpenses replicate the prototype's June-2026 seed so the
+// Go engine reproduces the JS computeAmplop outputs exactly.
+func seedConfig() Config {
+	return Config{Monthly: 5_000_000, ShopWeekly: 600_000, WeekendBudget: 200_000}
+}
+
+func seedSubs() []Subscription {
+	return []Subscription{
+		{ID: "s1", Name: "Netflix", Alloc: 187_000, DueDay: 5},
+		{ID: "s2", Name: "Spotify", Alloc: 55_000, DueDay: 10},
+		{ID: "s3", Name: "YouTube Premium", Alloc: 59_000, DueDay: 18},
+		{ID: "s4", Name: "iCloud+", Alloc: 29_000, DueDay: 28},
+	}
+}
+
+func seedExpenses() []Expense {
+	e := func(day int, amount int64, cat Category) Expense {
+		return Expense{Date: d(2026, 6, day), Amount: amount, Category: cat}
+	}
+	exps := []Expense{
+		e(1, 18_000, CatMakan), e(1, 12_000, CatJajan), e(1, 15_000, CatMakan),
+		e(2, 22_000, CatMakan), e(2, 35_000, CatJajan),
+		e(3, 30_000, CatMakan), e(3, 8_000, CatLainnya),
+		e(4, 25_000, CatMakan), e(4, 40_000, CatBelanja),
+		e(5, 20_000, CatMakan), e(5, 10_000, CatJajan), e(5, 20_000, CatCash),
+		e(6, 145_000, CatBelanja), e(6, 65_000, CatMakan),
+		e(7, 85_000, CatMakan), e(7, 28_000, CatJajan), e(7, 160_000, CatBelanja),
+		e(8, 19_000, CatMakan), e(8, 9_000, CatJajan),
+		e(9, 26_000, CatMakan), e(9, 30_000, CatLainnya),
+		e(10, 24_000, CatMakan), e(10, 14_000, CatJajan),
+		e(11, 32_000, CatMakan), e(11, 50_000, CatCash),
+		e(12, 16_000, CatMakan),
+	}
+	// Subscription payments are ordinary Langganan expenses (v2 model).
+	exps = append(exps,
+		Expense{Date: d(2026, 6, 5), Amount: 186_000, Category: CatLangganan, SubscriptionID: "s1"},
+		Expense{Date: d(2026, 6, 10), Amount: 65_000, Category: CatLangganan, SubscriptionID: "s2"},
+	)
+	return exps
+}
+
+func TestComputeMonth_June2026Seed(t *testing.T) {
+	in := MonthInput{
+		Year: 2026, Month: 6,
+		Today:         d(2026, 6, 16),
+		Config:        seedConfig(),
+		Subscriptions: seedSubs(),
+		Expenses:      seedExpenses(),
+	}
+	got := ComputeMonth(in)
+
+	if len(got.Weeks) != 4 {
+		t.Fatalf("len(Weeks) = %d, want 4", len(got.Weeks))
+	}
+	if len(got.Weekends) != 4 {
+		t.Fatalf("len(Weekends) = %d, want 4", len(got.Weekends))
+	}
+
+	wantWeekSpent := []int64{552_000, 190_000, 0, 0}
+	wantWeekLeft := []int64{48_000, 410_000, 600_000, 600_000}
+	wantWeekState := []State{StatePast, StatePast, StateCurrent, StateFuture}
+	for i, w := range got.Weeks {
+		if w.Budget != 600_000 {
+			t.Errorf("week %d budget = %d, want 600000", i, w.Budget)
+		}
+		if w.Spent != wantWeekSpent[i] {
+			t.Errorf("week %d spent = %d, want %d", i, w.Spent, wantWeekSpent[i])
+		}
+		if w.Left != wantWeekLeft[i] {
+			t.Errorf("week %d left = %d, want %d", i, w.Left, wantWeekLeft[i])
+		}
+		if w.State != wantWeekState[i] {
+			t.Errorf("week %d state = %s, want %s", i, w.State, wantWeekState[i])
+		}
+	}
+
+	wantWkndSpent := []int64{178_000, 0, 0, 0}
+	wantWkndLeft := []int64{22_000, 200_000, 200_000, 200_000}
+	wantWkndState := []State{StatePast, StatePast, StateFuture, StateFuture}
+	for i, w := range got.Weekends {
+		if w.Budget != 200_000 {
+			t.Errorf("weekend %d budget = %d, want 200000", i, w.Budget)
+		}
+		if w.Spent != wantWkndSpent[i] {
+			t.Errorf("weekend %d spent = %d, want %d", i, w.Spent, wantWkndSpent[i])
+		}
+		if w.Left != wantWkndLeft[i] {
+			t.Errorf("weekend %d left = %d, want %d", i, w.Left, wantWkndLeft[i])
+		}
+		if w.State != wantWkndState[i] {
+			t.Errorf("weekend %d state = %s, want %s", i, w.State, wantWkndState[i])
+		}
+	}
+
+	checks := []struct {
+		name string
+		got  int64
+		want int64
+	}{
+		{"ShopBudget", got.ShopBudget, 2_400_000},
+		{"ShopSpent", got.ShopSpent, 742_000},
+		{"WkndBudget", got.WkndBudget, 800_000},
+		{"WkndSpent", got.WkndSpent, 178_000},
+		{"SubsAlloc", got.SubsAlloc, 330_000},
+		{"LanggananSpent", got.LanggananSpent, 251_000},
+		{"FlexSpent", got.FlexSpent, 38_000},
+		{"FlexBudget", got.FlexBudget, 1_470_000},
+		{"TotalSpent", got.TotalSpent, 1_209_000},
+		{"Sisa", got.Sisa, 3_791_000},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %d, want %d", c.name, c.got, c.want)
+		}
+	}
+
+	// rows: belanja, weekend, langganan, fleksibel
+	wantRows := []Row{
+		{ID: EnvBelanja, Budget: 2_400_000, Spent: 742_000, Left: 1_658_000, Over: false},
+		{ID: EnvWeekend, Budget: 800_000, Spent: 178_000, Left: 622_000, Over: false},
+		{ID: EnvLangganan, Budget: 330_000, Spent: 251_000, Left: 79_000, Over: false},
+		{ID: EnvFleksibel, Budget: 1_470_000, Spent: 38_000, Left: 1_432_000, Over: false},
+	}
+	if len(got.Rows) != 4 {
+		t.Fatalf("len(Rows) = %d, want 4", len(got.Rows))
+	}
+	for i, r := range got.Rows {
+		w := wantRows[i]
+		if r.ID != w.ID || r.Budget != w.Budget || r.Spent != w.Spent || r.Left != w.Left || r.Over != w.Over {
+			t.Errorf("row %d = %+v, want id=%s budget=%d spent=%d left=%d over=%v",
+				i, r, w.ID, w.Budget, w.Spent, w.Left, w.Over)
+		}
+	}
+}
+
+// ---- Month boundary attribution (§6.2) -----------------------------------
+
+func TestComputeMonth_WeekOwnedByFridaysMonth(t *testing.T) {
+	// A belanja expense on Mon Jun 29 2026 belongs to the week of Fri Jul 3
+	// (owned by July). Viewing June, it must NOT count in any June week.
+	exp := []Expense{{Date: d(2026, 6, 29), Amount: 100_000, Category: CatBelanja}}
+
+	june := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	if june.ShopSpent != 0 {
+		t.Errorf("June ShopSpent = %d, want 0 (Jun 29 belongs to July's week)", june.ShopSpent)
+	}
+	if len(june.Weeks) != 4 {
+		t.Fatalf("June weeks = %d, want 4", len(june.Weeks))
+	}
+
+	// Viewing July, the same expense counts in July's first week (Fri Jul 3,
+	// range Mon Jun 29 – Sun Jul 5).
+	july := ComputeMonth(MonthInput{Year: 2026, Month: 7, Today: d(2026, 7, 16), Config: seedConfig(), Expenses: exp})
+	if july.ShopSpent != 100_000 {
+		t.Errorf("July ShopSpent = %d, want 100000 (Jun 29 belongs to July's first week)", july.ShopSpent)
+	}
+	if july.Weeks[0].Spent != 100_000 {
+		t.Errorf("July first week spent = %d, want 100000", july.Weeks[0].Spent)
+	}
+}
+
+func TestComputeMonth_WeekendOwnedBySaturdaysMonth(t *testing.T) {
+	// A weekend-envelope expense on Sun Jun 28 2026 belongs to the weekend of
+	// Sat Jun 27 (owned by June). Viewing July, it must not count.
+	exp := []Expense{{Date: d(2026, 6, 28), Amount: 90_000, Category: CatMakan}} // Sunday → weekend
+
+	july := ComputeMonth(MonthInput{Year: 2026, Month: 7, Today: d(2026, 7, 16), Config: seedConfig(), Expenses: exp})
+	if july.WkndSpent != 0 {
+		t.Errorf("July WkndSpent = %d, want 0 (Jun 28 belongs to June's weekend)", july.WkndSpent)
+	}
+
+	june := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	if june.WkndSpent != 90_000 {
+		t.Errorf("June WkndSpent = %d, want 90000", june.WkndSpent)
+	}
+}
+
+func TestComputeMonth_FlexAndLanggananByCalendarMonth(t *testing.T) {
+	// Flex (Lainnya weekday) and Langganan are attributed by calendar month
+	// only, regardless of week boundaries. Jun 29 is in June's calendar.
+	exp := []Expense{
+		{Date: d(2026, 6, 29), Amount: 12_000, Category: CatLainnya},                         // weekday flex
+		{Date: d(2026, 6, 30), Amount: 50_000, Category: CatLangganan, SubscriptionID: "s1"}, // langganan
+	}
+	june := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	if june.FlexSpent != 12_000 {
+		t.Errorf("June FlexSpent = %d, want 12000", june.FlexSpent)
+	}
+	if june.LanggananSpent != 50_000 {
+		t.Errorf("June LanggananSpent = %d, want 50000", june.LanggananSpent)
+	}
+}
+
+// ---- Negative / edge cases ------------------------------------------------
+
+func TestComputeMonth_NegativeWeekLeftAndOverflowRow(t *testing.T) {
+	// Overspend a week: belanja 700000 in week of Fri Jun 5 (budget 600000).
+	exp := []Expense{{Date: d(2026, 6, 3), Amount: 700_000, Category: CatBelanja}}
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	if got.Weeks[0].Left != -100_000 {
+		t.Errorf("week0 left = %d, want -100000", got.Weeks[0].Left)
+	}
+	if got.Rows[0].Over {
+		t.Errorf("belanja row over = true, but total shop budget (2.4M) > spent (700k)")
+	}
+}
+
+func TestComputeMonth_NegativeFlexBudget(t *testing.T) {
+	// monthly too small to cover shop+weekend budgets → flexBudget negative.
+	cfg := Config{Monthly: 1_000_000, ShopWeekly: 600_000, WeekendBudget: 200_000}
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: cfg})
+	// shopBudget = 600000*4 = 2.4M; wkndBudget = 200000*4 = 0.8M; flex = 1M - 2.4M - 0.8M = -2.2M
+	if got.FlexBudget != -2_200_000 {
+		t.Errorf("FlexBudget = %d, want -2200000", got.FlexBudget)
+	}
+}
+
+func TestComputeMonth_EmptyMonth(t *testing.T) {
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig()})
+	if got.TotalSpent != 0 {
+		t.Errorf("TotalSpent = %d, want 0", got.TotalSpent)
+	}
+	if got.Sisa != 5_000_000 {
+		t.Errorf("Sisa = %d, want 5000000", got.Sisa)
+	}
+}
+
+// ---- Per-subscription status (§6.4) --------------------------------------
+
+func TestSubscriptionStatus(t *testing.T) {
+	exps := seedExpenses()
+	subs := seedSubs()
+
+	// Netflix (s1) paid 186000 on Jun 5; alloc 187000 → diff +1000, paid.
+	netflix := SubscriptionStatus(subs[0], exps, 2026, 6)
+	if !netflix.Paid {
+		t.Fatalf("Netflix should be paid")
+	}
+	if netflix.PaidAmount != 186_000 {
+		t.Errorf("Netflix paid amount = %d, want 186000", netflix.PaidAmount)
+	}
+	if !timeutil.SameDate(netflix.PaidDate, d(2026, 6, 5)) {
+		t.Errorf("Netflix paid date = %v, want 2026-06-05", netflix.PaidDate)
+	}
+	if netflix.Diff != 1_000 {
+		t.Errorf("Netflix diff = %d, want 1000", netflix.Diff)
+	}
+	if netflix.Status != StatusPaid {
+		t.Errorf("Netflix status = %s, want paid", netflix.Status)
+	}
+
+	// YouTube (s3) unpaid.
+	youtube := SubscriptionStatus(subs[2], exps, 2026, 6)
+	if youtube.Paid {
+		t.Fatalf("YouTube should be unpaid")
+	}
+	if youtube.Status != StatusUnpaid {
+		t.Errorf("YouTube status = %s, want unpaid", youtube.Status)
+	}
+}

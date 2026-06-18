@@ -1,21 +1,7 @@
-#ex: make run func=HelloGet
+# Run the single routed Expense function.
+# ex: make run func=Expense port=8080 time=2026-06-15T10:00:00Z
 run:
 	@export $$(grep -v '^\s*#' .env | grep -v '^\s*$$' | xargs) && FUNCTION_TARGET=$(func) PORT=$(port) TIME=$(time) go run cmd/main.go
 
-run-weekly-get:
-	@make run func=WeeklyGet port=8199
-
-run-weekly-add:
-	@make run func=WeeklyAdd port=8198
-
-run-monthly-get:
-	@make run func=MonthlyGet port=8197
-
-run-monthly-add:
-	@make run func=MonthlyAdd port=8196
-
-run-recap-get:
-	@make run func=RecapGet port=8195
-
-run-hello:
-	@make run func=Hello port=8100
+run-expense:
+	@make run func=Expense port=8080
