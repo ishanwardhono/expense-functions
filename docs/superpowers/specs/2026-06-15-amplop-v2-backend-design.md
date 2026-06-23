@@ -420,9 +420,9 @@ Each phase ends green (compiles, tests pass). TDD for the engine and the effecti
 - [x] Handlers + route wiring for all §7 endpoints; **error→status mapping per §4.3**; handler tests (happy + validation 400, duplicate-payment 409, unknown-id 404) with `TIME` pinned.
 
 ### Phase 4 — Run & deploy
-- [ ] Verify local run (Makefile target, docker-compose service).
-- [ ] Deploy notes for the single `Expense` Cloud Function; env vars; CORS. First production deploy happens here (§4.4).
-- [ ] Update `README` / `.github/copilot-instructions.md` to the new structure.
+- [x] Verify local run (Makefile target, docker-compose service).
+- [x] Deploy notes for the single `Expense` Cloud Function; env vars; CORS. First production deploy happens here (§4.4).
+- [x] Update `README` / `.github/copilot-instructions.md` to the new structure.
 
 ### Phase 5 — AI scan import (deferred; see §9)
 

@@ -12,7 +12,7 @@ The backend is being **completely rewritten** from the v1 model (`weekly/`, `mon
 
 **The authoritative source of truth is the plan:** `docs/superpowers/specs/2026-06-15-amplop-v2-backend-design.md`. Read it before writing v2 code; it distills the Claude Design handoff (the UI prototype) so you don't need the prototype itself. Build in the order of its **§8 phases**, keeping the build green per phase.
 
-**Do not extend the v1 packages.** They are legacy and will be deleted (Phase 0). New work goes under `internal/` per the spec's target layout. `.github/copilot-instructions.md` describes the *old* v1 design and is stale until Phase 4 updates it.
+**Do not extend the v1 packages.** They are legacy and will be deleted (Phase 0). New work goes under `internal/` per the spec's target layout.
 
 ### Locked v2 decisions (summary — spec §2 is authoritative; keep in sync when decisions change)
 - **Server computes** all envelope/budget math; the API returns render-ready data (integers; the client formats).
