@@ -415,9 +415,9 @@ Each phase ends green (compiles, tests pass). TDD for the engine and the effecti
 - [x] Integration tests against local `devdb`, including: effective-dating (a change in month X is frozen for X−1 and applies X→forward; subscription created later is absent from earlier months; soft-end keeps past months) **and** the once-per-month unique partial index rejecting a duplicate Langganan payment.
 
 ### Phase 3 — Services + HTTP
-- [ ] Services with validation: expenses (Langganan/subscription_id rule **and the once-per-month payment rule** — service pre-check + graceful unique-violation handling → 409), subscriptions, budget; writing effective-from-current-month versions.
-- [ ] `month` service: resolve config + subs → load expenses over the wide window → run engine → assemble §7.1 payload (incl. derived `subscriptions[].paid` and `occurred_at`).
-- [ ] Handlers + route wiring for all §7 endpoints; **error→status mapping per §4.3**; handler tests (happy + validation 400, duplicate-payment 409, unknown-id 404) with `TIME` pinned.
+- [x] Services with validation: expenses (Langganan/subscription_id rule **and the once-per-month payment rule** — service pre-check + graceful unique-violation handling → 409), subscriptions, budget; writing effective-from-current-month versions.
+- [x] `month` service: resolve config + subs → load expenses over the wide window → run engine → assemble §7.1 payload (incl. derived `subscriptions[].paid` and `occurred_at`).
+- [x] Handlers + route wiring for all §7 endpoints; **error→status mapping per §4.3**; handler tests (happy + validation 400, duplicate-payment 409, unknown-id 404) with `TIME` pinned.
 
 ### Phase 4 — Run & deploy
 - [ ] Verify local run (Makefile target, docker-compose service).

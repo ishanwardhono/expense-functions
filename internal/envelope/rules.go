@@ -47,6 +47,22 @@ func (e EnvelopeID) Label() string {
 	return string(e)
 }
 
+// ShortLabel returns the compact badge label used on per-expense rows in the
+// day list (spec §7.1, e.g. "BLNJ", "SUBS").
+func (e EnvelopeID) ShortLabel() string {
+	switch e {
+	case EnvBelanja:
+		return "BLNJ"
+	case EnvWeekend:
+		return "WKND"
+	case EnvLangganan:
+		return "SUBS"
+	case EnvFleksibel:
+		return "FLEX"
+	}
+	return string(e)
+}
+
 // isWeekend reports whether the date falls on Saturday or Sunday (Asia/Jakarta).
 // Normalizing to Loc keeps weekday classification consistent with dayNum's
 // date comparison even if a caller passes a timestamp in another zone.

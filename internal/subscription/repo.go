@@ -51,6 +51,40 @@ WHERE id = $1`
 	return s, nil
 }
 
+// Exists reports whether a subscription identity with id exists. Used by the
+// expense service to validate a Langganan expense's subscription_id (spec §7.5).
+func (r *Repo) Exists(ctx context.Context, id uuid.UUID) (bool, error) {
+	const q = `SELECT EXISTS (SELECT 1 FROM amplop.subscription WHERE id = $1)`
+	var exists bool
+	if err := r.db.GetContext(ctx, &exists, q, id); err != nil {
+		return false, fmt.Errorf("subscription exists %s: %w", id, err)
+	}
+	return exists, nil
+}
+
+// LatestVersion returns the most recent version with effective month ≤ (year,
+// month), regardless of active state. Used to merge partial edits and to carry
+// alloc/due_day forward when soft-ending a subscription (spec §5.2). Returns a
+// NotFound when no version exists at or before the month.
+func (r *Repo) LatestVersion(ctx context.Context, subscriptionID uuid.UUID, year, month int) (Version, error) {
+	const q = `
+SELECT id, subscription_id, effective_year, effective_month, alloc, due_day, active,
+       created_at, updated_at
+FROM amplop.subscription_version
+WHERE subscription_id = $1
+  AND (effective_year, effective_month) <= ($2, $3)
+ORDER BY effective_year DESC, effective_month DESC
+LIMIT 1`
+	var v Version
+	if err := r.db.GetContext(ctx, &v, q, subscriptionID, year, month); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Version{}, apierr.NotFound("subscription %s has no version for %d-%02d", subscriptionID, year, month)
+		}
+		return Version{}, fmt.Errorf("latest version %s %d-%02d: %w", subscriptionID, year, month, err)
+	}
+	return v, nil
+}
+
 // Resolve returns the active subscription set for (year, month) using the §5.1
 // lateral join query. Returns an empty slice when no active subscriptions exist.
 func (r *Repo) Resolve(ctx context.Context, year, month int) ([]Resolved, error) {

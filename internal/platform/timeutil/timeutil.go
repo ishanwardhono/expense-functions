@@ -16,6 +16,46 @@ import (
 // Loc is the single timezone used for every date/time decision.
 var Loc = mustLoadJakarta()
 
+// Clock returns the current instant. Services depend on a Clock (defaulting to
+// Now) so tests can pin "now" deterministically without touching the
+// environment. Effective-dated writes derive their month from it.
+type Clock func() time.Time
+
+// monthNames holds the full Indonesian month names, indexed 1..12.
+var monthNames = [...]string{
+	"", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+	"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+}
+
+// monthAbbrs holds the short Indonesian month names, indexed 1..12.
+var monthAbbrs = [...]string{
+	"", "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+	"Jul", "Agu", "Sep", "Okt", "Nov", "Des",
+}
+
+// MonthName returns the full Indonesian month name (e.g. 6 → "Juni"); month
+// must be 1..12, otherwise "" is returned.
+func MonthName(month int) string {
+	if month < 1 || month > 12 {
+		return ""
+	}
+	return monthNames[month]
+}
+
+// MonthAbbr returns the short Indonesian month name (e.g. 6 → "Jun"); month
+// must be 1..12, otherwise "" is returned.
+func MonthAbbr(month int) string {
+	if month < 1 || month > 12 {
+		return ""
+	}
+	return monthAbbrs[month]
+}
+
+// ParseDate parses a "YYYY-MM-DD" string as a midnight Asia/Jakarta date.
+func ParseDate(s string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", s, Loc)
+}
+
 func mustLoadJakarta() *time.Location {
 	loc, err := time.LoadLocation("Asia/Jakarta")
 	if err != nil {
