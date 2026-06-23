@@ -5,36 +5,27 @@ package expense
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
 
 	"github.com/ishanwardhono/expense-function/internal/platform/apierr"
+	"github.com/ishanwardhono/expense-function/internal/platform/config"
+	"github.com/ishanwardhono/expense-function/internal/platform/database"
 	"github.com/ishanwardhono/expense-function/internal/platform/timeutil"
 )
 
 func connectTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	host := os.Getenv("DB_HOST")
-	if host == "" {
+	if os.Getenv("DB_HOST") == "" {
 		t.Skip("DB_HOST not set; skipping integration test")
 	}
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslrootcert=%s sslmode=verify-full",
-		host, os.Getenv("DB_PORT"), os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"), os.Getenv("DB_SSL_ROOT_CERT"),
-	)
-	db, err := sqlx.Open("postgres", dsn)
+	db, err := database.Connect(config.LoadDatabase())
 	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	if err := db.Ping(); err != nil {
-		t.Fatalf("ping test db: %v", err)
+		t.Fatalf("connect test db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
 	return db

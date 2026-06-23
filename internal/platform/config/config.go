@@ -15,6 +15,7 @@ type Database struct {
 	User        string
 	Password    string
 	Name        string
+	SSLMode     string
 	SSLRootCert string
 }
 
@@ -36,14 +37,21 @@ func Load() (*Config, error) {
 	}, nil
 }
 
-// LoadDatabase reads the DB_* environment variables.
+// LoadDatabase reads the DB_* environment variables. DB_SSL_MODE defaults to
+// "verify-full" (the production CockroachDB pattern); local dev against an
+// insecure node sets it to "disable".
 func LoadDatabase() Database {
+	sslMode := os.Getenv("DB_SSL_MODE")
+	if sslMode == "" {
+		sslMode = "verify-full"
+	}
 	return Database{
 		Host:        os.Getenv("DB_HOST"),
 		Port:        os.Getenv("DB_PORT"),
 		User:        os.Getenv("DB_USER"),
 		Password:    os.Getenv("DB_PASSWORD"),
 		Name:        os.Getenv("DB_NAME"),
+		SSLMode:     sslMode,
 		SSLRootCert: os.Getenv("DB_SSL_ROOT_CERT"),
 	}
 }

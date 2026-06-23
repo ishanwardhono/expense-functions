@@ -1,122 +1,83 @@
-<!-- STALE: describes the v1 model. The v2 rewrite is authoritative in /CLAUDE.md and docs/superpowers/specs/2026-06-15-amplop-v2-backend-design.md. This file is updated at Phase 4. -->
-
-# GitHub Copilot Custom Instructions for Expense Function
+# GitHub Copilot Custom Instructions for the Expense Function
 
 ## Project Overview
-This is a Google Cloud Functions-based expense tracking application written in Go. The application manages both weekly and monthly expenses with PostgreSQL database storage.
+Go backend for a personal expense-tracking app, deployed as a single **Google
+Cloud Function** (functions-framework-go) over **CockroachDB**. Single user, no
+auth, `CORS: *`. This is the **v2 "Amplop" (envelope budgeting)** model.
+
+The authoritative design is
+`docs/superpowers/specs/2026-06-15-amplop-v2-backend-design.md`; project
+conventions live in `/CLAUDE.md`. Read those before non-trivial changes.
 
 ## Architecture & Tech Stack
-- **Language**: Go 1.21.3
+- **Language**: Go (module targets 1.21)
 - **Framework**: Google Cloud Functions Framework (`functions-framework-go`)
-- **Database**: PostgreSQL with `sqlx` and `lib/pq` drivers
-- **ID Generation**: UUID (`google/uuid`)
-- **Deployment**: Google Cloud Functions
-- **Testing**: Go standard testing package
+- **Database**: CockroachDB via `sqlx` + `lib/pq` (`sslmode=verify-full` in prod;
+  `disable` for a local insecure node via `DB_SSL_MODE`). Single connection
+  (`SetMaxOpenConns(1)`) — the serverless pattern.
+- **ID Generation**: `gen_random_uuid()` / `google/uuid`
+- **Money**: integer Rupiah (`INT8`); the API returns integers, the client formats.
+- **Timezone**: Asia/Jakarta; `TIME` env var (RFC3339) pins "now" / current month.
 
 ## Project Structure
 ```
-├── cmd/main.go                 # Local development server entry point
-├── handler.go                  # HTTP function handlers registration
-├── base.go                     # Base handler with error handling and CORS
-├── debug.go                    # Debug utilities
-├── common/                     # Shared utilities
-│   ├── config.go              # Environment configuration
-│   ├── db.go                  # Database connection and utilities
-│   ├── currency.go            # Currency formatting utilities
-│   └── time.go                # Time utilities and mocking
-├── weekly/                    # Weekly expense management
-│   ├── model.go               # Data models and business logic
-│   ├── add.go                 # Add weekly expenses
-│   ├── get.go                 # Retrieve weekly expenses
-│   ├── db.go                  # Database operations
-│   ├── config.go              # Configuration loading
-│   └── utils.go               # Helper functions
-├── monthly/                   # Monthly expense management
-│   └── [similar structure to weekly/]
-└── data/ddl.sql              # Database schema
+function.go                  registers ONE HTTP function "Expense" → internal router
+cmd/main.go                  local dev server (functions-framework StartHostPort)
+internal/
+  platform/  config · database(sqlx) · httpx(router, CORS, JSON, error→HTTP) · apierr · timeutil
+  envelope/  PURE engine: EnvelopeOf + ComputeMonth over a resolved month context
+  expense/   model · repo · service · handler   (all transactions, incl. subscription payments)
+  subscription/  identity + effective-dated versions + resolution
+  budget/    effective-dated config + resolution
+  month/     resolve config+subs → run engine → assemble GET /month dashboard
+migrations/  0001_init_amplop.sql
 ```
 
 ## Code Conventions & Patterns
 
-### Database Operations
-- Use `sqlx` for database operations with struct scanning
-- All database functions should accept `context.Context` as first parameter
-- Use prepared statements and proper error handling
-- Database models use struct tags: `db:"column_name"`
+### Layering
+- **handler (HTTP) → service (orchestration, validation, effective-date
+  resolution) → repo (SQL)**. Keep handlers thin.
+- `internal/envelope` is **pure**: no DB, no HTTP, no versioning logic. It
+  receives the already-resolved config + subscription set for a month. Keep it that way.
 
-### Function Handlers
-- All HTTP functions are registered in `handler.go` using `functions.HTTP()`
-- Use `baseHandler()` wrapper for consistent error handling and CORS
-- Request/Response models defined in respective package model files
-- Proper JSON marshaling/unmarshaling for API communication
+### Database operations
+- `sqlx` with `db:"col"` struct tags; every DB function takes `context.Context` first.
+- Parameterized queries only. Effective-date reads use a tuple comparison
+  `(effective_year, effective_month) <= ($Y, $M)` (range scan; no `year*12+month`).
+- New tables live in the `amplop` schema. Do not touch legacy `public.*` tables.
 
-### Error Handling
-- Always log errors with context using `log.Printf()`
-- Return meaningful error messages
-- Use proper HTTP status codes in base handler
+### HTTP & errors
+- One routed function registered as `functions.HTTP("Expense", …)` in `function.go`.
+- Services return **typed errors** from `internal/platform/apierr`; `httpx` maps
+  them to status: `Invalid`→400, `NotFound`→404, `Conflict`→409, else 500. Body is
+  always `{"error":"message"}`.
+- CORS (`*`), JSON, and panic recovery are middleware in `internal/platform/httpx`.
 
-### Environment Configuration
-- Configuration loaded from environment variables in `common/config.go`
-- Support for time mocking via `TIME` environment variable
-- Expense limits configured via `MAX_EXPENSE` and `MAX_MONTHLY_EXPENSE`
+### Dates / money
+- Stored as SQL `DATE` + `TIME` (Asia/Jakarta); the API returns `occurred_at` as
+  **RFC3339**. Money is integer Rupiah.
 
 ### Testing
-- Unit tests in `*_test.go` files
-- Use Go standard testing package
-- Test configuration, utilities, and database operations
+- Pure engine + service/handler unit tests run under `go test ./...`.
+- Repo integration tests are tagged `//go:build integration` and run against a
+  local `devdb` (skipped when `DB_HOST` is unset). See `README.md` for the
+  Docker CockroachDB setup.
 
-## Key Business Logic
-
-### Weekly Expenses
-- Track expenses by year, week, and day (1=Monday to 7=Sunday)
-- Separate tracking for weekday, Saturday, and Sunday expenses
-- Expense limits enforced per day type
-
-### Monthly Expenses
-- Track expenses by year and month
-- Aggregate totals and category breakdowns
-- Monthly expense limits enforced
-
-### Common Features
-- UUID-based primary keys
-- Timestamp tracking with `created_time`
-- Expense categorization with `type` field
-- Optional notes for each expense
-- Currency formatting utilities
-- Time zone handling and mocking support
+## Key Domain Rules (see spec §6 for detail)
+- **Four envelopes, derived (not stored)** from category + day-of-week: `belanja`,
+  `weekend`, `fleksibel`, `langganan` (`EnvelopeOf`).
+- **Subscription payments are ordinary expenses** (category `Langganan` +
+  `subscription_id`); **at most one payment per subscription per calendar month**
+  (unique partial index + service pre-check → 409).
+- **Budgets and subscriptions are effective-dated**: reads pick the latest version
+  with effective month ≤ viewed month; writes are effective from the current month
+  (past months stay frozen).
+- **Month boundaries**: a shopping week (Mon–Sun) belongs to the month of its
+  Friday; a weekend (Sat+Sun) to the month of its Saturday. The month read query
+  loads a window wider than the calendar month; the engine attributes precisely.
 
 ## Development Guidelines
-
-### When adding new features:
-1. Follow the existing package structure (`weekly/` or `monthly/`)
-2. Add models to `model.go` with proper struct tags
-3. Implement database operations in `db.go`
-4. Add business logic functions (add/get) in separate files
-5. Register HTTP handlers in main `handler.go`
-6. Add configuration loading if needed
-7. Write unit tests for utilities and business logic
-
-### Database Schema Considerations:
-- Use appropriate PostgreSQL data types (INT2 for year/week/month, INT4 for amounts)
-- Add proper indexes for query performance
-- Use UUID for primary keys with `gen_random_uuid()`
-- Include created_time with default CURRENT_TIMESTAMP
-
-### API Design:
-- RESTful endpoints with clear naming
-- Proper HTTP methods and status codes
-- Consistent JSON request/response formats
-- Error responses with meaningful messages
-
-## Common Patterns to Follow
-- Configuration: Load from environment with validation
-- Database: Context-aware operations with proper error handling  
-- Models: Clear separation of data models and business logic
-- Testing: Comprehensive unit tests for utilities and edge cases
-- Logging: Structured logging with appropriate levels
-- Error Handling: Graceful degradation with user-friendly messages
-
-## Dependencies Management
-- Keep `go.mod` clean and up-to-date
-- Use semantic versioning for dependencies
-- Minimal external dependencies for cloud function efficiency
+- One logical change per PR; focused diffs. Conventional commits.
+- Cover both success and failure paths in tests (400/404/409 mappings; effective-dating).
+- Don't extend the deleted v1 model; build per the spec's phases, keeping the build green.
