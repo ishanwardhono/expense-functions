@@ -1,0 +1,237 @@
+{
+	"info": {
+		"name": "Expense Functions — Amplop v2",
+		"_postman_id": "a1b2c3d4-amplop-v2-collection-0001",
+		"description": "Importable collection for the single routed `Expense` Cloud Function (Amplop v2 envelope-budgeting backend).\n\n- Single user, **no auth**, `CORS: *`.\n- Set `baseUrl` to the local dev server (`http://localhost:8080`, run via `make run func=Expense port=8080`) or the deployed function (`https://asia-southeast2-PROJECT.cloudfunctions.net/Expense`).\n- After creating an expense/subscription, paste its `id` into the `expenseId` / `subscriptionId` collection variables to use the PUT/DELETE requests.\n- Money is integer Rupiah. Dates are `YYYY-MM-DD`; `time` is optional `HH:MM`. Query `year`/`month` are integers and default to the current Asia/Jakarta month.\n- Errors return `{\"error\":\"...\"}` mapped to 400 (validation), 404 (not found), 409 (conflict — duplicate subscription payment), 500 (internal).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Month",
+			"item": [
+				{
+					"name": "GET /month — dashboard",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/month?year=2026&month=6",
+							"host": ["{{baseUrl}}"],
+							"path": ["month"],
+							"query": [
+								{ "key": "year", "value": "2026", "description": "Optional integer. Defaults to current Asia/Jakarta year." },
+								{ "key": "month", "value": "6", "description": "Optional integer 1-12. Defaults to current Asia/Jakarta month." }
+							]
+						},
+						"description": "Render-ready month dashboard: period, stats, four envelopes (belanja/weekend/langganan/fleksibel), belanja weeks, weekends, flex, calendar, per-day expenses, and subscriptions. Both query params are optional. → 200."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Expenses",
+			"item": [
+				{
+					"name": "POST /expenses — create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2026-06-23\",\n  \"time\": \"12:10\",\n  \"amount\": 18000,\n  \"category\": \"Makan\",\n  \"subscription_id\": null,\n  \"note\": \"Nasi padang\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/expenses",
+							"host": ["{{baseUrl}}"],
+							"path": ["expenses"]
+						},
+						"description": "Create an expense. Required: `date` (YYYY-MM-DD), `amount` (>0, Rupiah), `category`. Optional: `time` (HH:MM, defaults to midnight), `note`, `subscription_id`.\n\nCategory enum: Makan, Belanja, Jajan, Cash, Lainnya, Langganan.\n`subscription_id` must be null/omitted unless category is Langganan. → 201. Invalid input → 400."
+					},
+					"response": []
+				},
+				{
+					"name": "POST /expenses — Langganan payment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2026-06-05\",\n  \"time\": \"09:00\",\n  \"amount\": 186000,\n  \"category\": \"Langganan\",\n  \"subscription_id\": \"{{subscriptionId}}\",\n  \"note\": \"Netflix\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/expenses",
+							"host": ["{{baseUrl}}"],
+							"path": ["expenses"]
+						},
+						"description": "Subscription payment = ordinary expense with category `Langganan` + a valid `subscription_id`. At most one payment per subscription per calendar month → a duplicate returns 409. Unknown subscription_id → 404; missing it for a Langganan expense → 400. → 201."
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /expenses/{id} — update",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2026-06-23\",\n  \"time\": \"14:00\",\n  \"amount\": 22000,\n  \"category\": \"Makan\",\n  \"subscription_id\": null,\n  \"note\": \"Makan siang\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/expenses/{{expenseId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["expenses", "{{expenseId}}"]
+						},
+						"description": "Replace the expense identified by `{{expenseId}}` (a UUID). Same body shape as create. Unknown id → 404; invalid input → 400; conflicting Langganan move → 409. → 200."
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /expenses/{id}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/expenses/{{expenseId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["expenses", "{{expenseId}}"]
+						},
+						"description": "Delete the expense identified by `{{expenseId}}` (a UUID). Unknown id → 404. → 204 No Content (empty body)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Subscriptions",
+			"item": [
+				{
+					"name": "GET /subscriptions — list (resolved)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/subscriptions?year=2026&month=6",
+							"host": ["{{baseUrl}}"],
+							"path": ["subscriptions"],
+							"query": [
+								{ "key": "year", "value": "2026", "description": "Optional integer. Defaults to current year." },
+								{ "key": "month", "value": "6", "description": "Optional integer 1-12. Defaults to current month." }
+							]
+						},
+						"description": "List subscriptions active in the queried month (effective-dated resolution). Returns an array of {id, name, color, alloc, due_day}. → 200."
+					},
+					"response": []
+				},
+				{
+					"name": "POST /subscriptions — create",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Netflix\",\n  \"color\": \"#c8403c\",\n  \"alloc\": 187000,\n  \"due_day\": 5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/subscriptions",
+							"host": ["{{baseUrl}}"],
+							"path": ["subscriptions"]
+						},
+						"description": "Create a subscription definition + a version effective from the current month. Required: `name`, `alloc` (>0), `due_day` (1-31). Optional: `color` (hex). → 201. Invalid input → 400."
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /subscriptions/{id} — update",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Netflix Premium\",\n  \"alloc\": 200000\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/subscriptions/{{subscriptionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["subscriptions", "{{subscriptionId}}"]
+						},
+						"description": "Update the subscription identified by `{{subscriptionId}}` (a UUID). All fields optional — send only what changes. `name`/`color` update identity (retroactive); `alloc`/`due_day` upsert a version effective from the current month (past months frozen). Unknown id → 404; invalid value → 400. → 200."
+					},
+					"response": []
+				},
+				{
+					"name": "DELETE /subscriptions/{id}",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/subscriptions/{{subscriptionId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["subscriptions", "{{subscriptionId}}"]
+						},
+						"description": "Soft-delete the subscription identified by `{{subscriptionId}}` (a UUID): writes a version with active=false effective from the current month; past months still show it. Unknown id → 404. → 204 No Content."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Budget",
+			"item": [
+				{
+					"name": "GET /budget — effective config",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/budget?year=2026&month=6",
+							"host": ["{{baseUrl}}"],
+							"path": ["budget"],
+							"query": [
+								{ "key": "year", "value": "2026", "description": "Optional integer. Defaults to current year." },
+								{ "key": "month", "value": "6", "description": "Optional integer 1-12. Defaults to current month." }
+							]
+						},
+						"description": "Effective budget config for the queried month (latest version with effective month ≤ queried month). Returns {effective_year, effective_month, monthly, shop_weekly, weekend_budget}. → 200."
+					},
+					"response": []
+				},
+				{
+					"name": "PUT /budget — update",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"monthly\": 5500000,\n  \"shop_weekly\": 650000,\n  \"weekend_budget\": 200000\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/budget",
+							"host": ["{{baseUrl}}"],
+							"path": ["budget"]
+						},
+						"description": "Upsert a budget config version effective from the current month (past months stay frozen). All three values required and must be ≥ 0. → 200. Negative value → 400."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{ "key": "baseUrl", "value": "http://localhost:8080", "type": "string" },
+		{ "key": "expenseId", "value": "", "type": "string" },
+		{ "key": "subscriptionId", "value": "", "type": "string" }
+	]
+}
