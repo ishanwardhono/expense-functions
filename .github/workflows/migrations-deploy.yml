@@ -1,0 +1,67 @@
+# Prod auto-apply: run pending migrations against the production CockroachDB
+# (defaultdb, sslmode=verify-full) when a migration merges to main.
+#
+# SHIPS DISABLED. The apply job is gated by the repo variable
+# MIGRATIONS_AUTO_APPLY: until it is set to "true", merges to main trigger this
+# workflow but the job is SKIPPED — nothing touches prod. Manual workflow_dispatch
+# runs are NOT gated by the flag (used to validate the cert/secrets path while
+# still testing), but every run still pauses on the `production` environment
+# approval gate before applying.
+name: migrations-deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "migrations/**"
+      - ".github/workflows/migrations-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      database:
+        description: "Override target database (defaults to the DB_NAME secret)"
+        required: false
+        default: ""
+
+env:
+  MIGRATE_VERSION: v4.17.1
+
+jobs:
+  apply-prod:
+    # Feature flag: skipped on push until MIGRATIONS_AUTO_APPLY=true.
+    # Manual dispatch always runs (for dev testing of this pipeline).
+    if: github.event_name == 'workflow_dispatch' || vars.MIGRATIONS_AUTO_APPLY == 'true'
+    runs-on: ubuntu-latest
+    # Required-reviewer protection on this environment pauses for one-click
+    # approval before any prod DDL runs (defense-in-depth, independent of the flag).
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install migrate CLI
+        run: |
+          curl -fsSL \
+            "https://github.com/golang-migrate/migrate/releases/download/${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" \
+            | tar xz migrate
+          sudo install -m 0755 migrate /usr/local/bin/migrate
+          migrate -version
+
+      - name: Reconstruct CA certificate
+        run: |
+          echo "${{ secrets.DB_SSL_ROOT_CERT_B64 }}" | base64 -d > "${RUNNER_TEMP}/ca.crt"
+          test -s "${RUNNER_TEMP}/ca.crt" || { echo "ca.crt is empty — check DB_SSL_ROOT_CERT_B64"; exit 1; }
+
+      - name: Apply migrations (verify-full)
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DATABASE_OVERRIDE: ${{ github.event.inputs.database }}
+        run: |
+          DB_NAME="${DATABASE_OVERRIDE:-$DB_NAME}"
+          # URL-encode is unnecessary for the host/port/db; password is passed via
+          # the userinfo segment. Keep the cert path out of any echoed URL.
+          url="cockroachdb://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=verify-full&sslrootcert=${RUNNER_TEMP}/ca.crt"
+          echo "Applying migrations to ${DB_HOST}:${DB_PORT}/${DB_NAME} (verify-full)"
+          migrate -path migrations -database "$url" up

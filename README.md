@@ -70,9 +70,24 @@ in-memory store is wiped on container removal.)
 
 ### 2. Apply the migration
 
+Migrations are managed with [golang-migrate](https://github.com/golang-migrate/migrate)
+(versioned, up-only `*.up.sql` files under `migrations/`, tracked in a
+`schema_migrations` ledger). Install the CLI once:
+
 ```bash
-cat migrations/0001_init_amplop.sql | docker exec -i crdb-amplop ./cockroach sql --insecure --database=devdb
+go install -tags 'cockroachdb' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.17.1
 ```
+
+Then apply pending migrations (reads `DB_*` from `.env`, so do step 3 first or
+export them):
+
+```bash
+make migrate-up
+```
+
+> Re-running is safe — already-applied migrations are skipped via the ledger.
+> The very first `make migrate-up` against a DB that was previously set up by
+> hand simply records the baseline (migration `0001` is idempotent).
 
 ### 3. Point `.env` at the local node
 
@@ -117,8 +132,8 @@ DB_HOST=localhost DB_PORT=26257 DB_USER=root DB_PASSWORD= DB_NAME=devdb DB_SSL_M
 
 Production target is the single `Expense` Cloud Function over the production
 CockroachDB (`defaultdb`) with `DB_SSL_MODE=verify-full` (requires the CA cert).
-**Apply `migrations/0001_init_amplop.sql` to the production database before the
-first deploy.**
+**Apply migrations to the production database before the first deploy** (see
+[Database migrations in CI](#database-migrations-in-ci)).
 
 ```bash
 gcloud functions deploy Expense \
@@ -136,3 +151,47 @@ Notes:
 - The CA cert (`DB_SSL_ROOT_CERT`) must be deployed alongside the source (it is read at runtime).
 - `--allow-unauthenticated` keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
 - Do **not** set `DB_SSL_MODE=disable` in production.
+
+## Database migrations in CI
+
+Two GitHub Actions workflows manage migrations:
+
+- **`migrations-check`** (`.github/workflows/migrations-check.yml`) — runs on every
+  PR that touches `migrations/**`. Spins up a throwaway CockroachDB node and
+  applies all migrations from a clean slate, so a malformed or out-of-order
+  migration fails review instead of prod. No secrets required.
+- **`migrations-deploy`** (`.github/workflows/migrations-deploy.yml`) — applies
+  pending migrations to production (`defaultdb`, `verify-full`) on merge to
+  `main`.
+
+### Prod auto-apply ships DISABLED
+
+The deploy job is gated by the repo variable **`MIGRATIONS_AUTO_APPLY`**:
+
+- Unset / not `true` → merges to `main` trigger the workflow but the apply job is
+  **skipped**. Nothing touches prod. (This is the current state — still testing.)
+- Set to `true` (GitHub → Settings → Secrets and variables → Actions →
+  **Variables**) → merges auto-apply.
+- A manual **Run workflow** (`workflow_dispatch`) runs regardless of the flag —
+  use it to validate the cert/secrets path while testing. Its optional
+  `database` input overrides the target DB name.
+
+Every prod run also pauses on the `production` **Environment** approval gate
+(GitHub → Settings → Environments → `production` → required reviewers) before any
+DDL executes.
+
+### Required secrets
+
+Set these as repo or `production`-environment secrets for `migrations-deploy`:
+
+| Secret | Value |
+| --- | --- |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Production CockroachDB connection |
+| `DB_NAME` | `defaultdb` |
+| `DB_SSL_ROOT_CERT_B64` | The CA cert, base64-encoded: `base64 -i ca.crt` (the workflow decodes it to a temp file) |
+
+### Local migrations
+
+```bash
+make migrate-up      # applies pending migrations using DB_* from .env
+```
