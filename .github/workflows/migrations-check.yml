@@ -1,0 +1,57 @@
+# PR pre-check: apply every migration from a clean slate against a throwaway
+# CockroachDB node. Catches malformed / out-of-order migrations before merge,
+# so a bad migration fails review instead of failing prod. No secrets needed.
+name: migrations-check
+
+on:
+  pull_request:
+    paths:
+      - "migrations/**"
+      - ".github/workflows/migrations-check.yml"
+
+env:
+  MIGRATE_VERSION: v4.17.1
+  CRDB_IMAGE: cockroachdb/cockroach:latest
+
+jobs:
+  apply-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # CockroachDB needs a custom start command, which `services:` can't
+      # provide, so run it as a detached container (mirrors the README setup).
+      - name: Start CockroachDB (insecure single node)
+        run: |
+          docker run -d --name crdb -p 26257:26257 \
+            "$CRDB_IMAGE" start-single-node --insecure
+
+      - name: Wait for CockroachDB and create devdb
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec crdb ./cockroach sql --insecure -e "SELECT 1;" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          docker exec crdb ./cockroach sql --insecure \
+            -e "CREATE DATABASE IF NOT EXISTS devdb;"
+
+      - name: Install migrate CLI
+        run: |
+          curl -fsSL \
+            "https://github.com/golang-migrate/migrate/releases/download/${MIGRATE_VERSION}/migrate.linux-amd64.tar.gz" \
+            | tar xz migrate
+          sudo install -m 0755 migrate /usr/local/bin/migrate
+          migrate -version
+
+      - name: Apply migrations from scratch
+        run: |
+          migrate -path migrations \
+            -database "cockroachdb://root@localhost:26257/devdb?sslmode=disable" \
+            up
+
+      - name: Show applied versions
+        run: |
+          docker exec crdb ./cockroach sql --insecure --database=devdb \
+            -e "SELECT * FROM schema_migrations;"
