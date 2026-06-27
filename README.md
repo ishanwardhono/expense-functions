@@ -128,28 +128,104 @@ DB_HOST=localhost DB_PORT=26257 DB_USER=root DB_PASSWORD= DB_NAME=devdb DB_SSL_M
   go test -tags integration ./...
 ```
 
-## Deploy
+## Infrastructure & deployment
 
-Production target is the single `Expense` Cloud Function over the production
-CockroachDB (`defaultdb`) with `DB_SSL_MODE=verify-full` (requires the CA cert).
-**Apply migrations to the production database before the first deploy** (see
-[Database migrations in CI](#database-migrations-in-ci)).
+Everything is code — no console clicks. There are **three things you ever do**, and
+each maps to a clear command or a git push:
+
+| # | You want to… | How |
+|---|---|---|
+| 1 | **Create the function** on a (new) GCP account | run the one-time setup commands below |
+| 2 | **Change infra** (an env var, scaling, a secret reference) | edit `terraform/main.tf`, open a PR, merge → auto-applies |
+| 3 | **Ship new code** | push Go changes to `main` → auto-deploys |
+
+### How it fits together
+
+- **`terraform/main.tf`** is the infrastructure (what the console used to hold): the
+  single `expense` Cloud Run service (region `asia-southeast1`, over production
+  `defaultdb`, `DB_SSL_MODE=verify-full`), its runtime service account, Secret Manager
+  access, and the CI login (Workload Identity Federation). All editable config sits in
+  the `locals` block at the top of the file. State lives in a GCS bucket.
+- **Two GitHub workflows** do the automation, each on its own trigger:
+  - **`deploy.yml`** — on push to `main` touching `*.go` → builds the image and rolls
+    out a new Cloud Run revision (your **need #3**).
+  - **`terraform.yml`** — on a PR touching `terraform/**` it posts a **plan**; on merge
+    to `main` it **applies** (your **need #2**). Both behind the `production` approval gate.
+- The two never fight over the container image: a `lifecycle { ignore_changes = [image] }`
+  on the service lets `deploy.yml` own the image while Terraform owns everything else.
+
+### Identities (who can do what)
+
+Terraform creates three service accounts, least-privilege:
+
+| SA | Used by | Can |
+|---|---|---|
+| `expense-runtime` | the running service | read the 2 DB secrets |
+| `expense-deployer` | `deploy.yml` | build + deploy a revision |
+| `expense-infra` | `terraform.yml` apply | manage the whole module (IAM, SAs, secrets, WIF) — powerful; impersonation is locked to this repo and apply is gated |
+
+CI authenticates via **Workload Identity Federation** (short-lived OIDC tokens) — no
+service-account JSON keys are ever created or stored.
+
+### Prerequisites
+
+- CLIs: `gcloud`, `terraform`, and `gh` — all authenticated
+  (`gcloud auth login` + `gcloud auth application-default login`, `gh auth login`).
+- A GCP project, and the two CockroachDB secrets present in Secret Manager
+  (`expense-function-cockroachdb-password`, `expense-cockroachdb-crt`).
+- The `production` Environment configured with required reviewers
+  (GitHub → Settings → Environments) for the approval gates.
+
+### Need #1 — first-time setup (run once)
+
+> The first `terraform apply` is run **locally** (the infra SA + its CI login don't
+> exist yet). After this, CI takes over and you rarely touch Terraform from your laptop.
 
 ```bash
-gcloud functions deploy Expense \
-  --gen2 \
-  --runtime=go121 \
-  --region=asia-southeast2 \
-  --trigger-http \
-  --allow-unauthenticated \
-  --entry-point=Expense \
-  --set-env-vars=DB_HOST=...,DB_PORT=...,DB_USER=...,DB_PASSWORD=...,DB_NAME=defaultdb,DB_SSL_MODE=verify-full,DB_SSL_ROOT_CERT=ca.crt
+make tf-bootstrap   # create the GCS bucket that stores Terraform state
+make tf-init        # initialise Terraform (downloads the Google provider)
+make tf-apply       # create the service (placeholder image), the 3 SAs, IAM, WIF
+make gh-vars        # push WIF_PROVIDER, DEPLOY_SA_EMAIL, TF_INFRA_SA_EMAIL into GitHub
 ```
 
+Then trigger the first real code deploy (the `tf-apply` left a placeholder image):
+push a commit to `main`, or run the **deploy** workflow via *Run workflow*. Also
+**apply DB migrations** to production first (see
+[Database migrations in CI](#database-migrations-in-ci)).
+
+`make gh-vars` sets the repo **Actions variables** the workflows read, using `gh` — no
+copy-paste.
+
+### Need #2 — change infrastructure
+
+Edit the value in the `locals` block of `terraform/main.tf` (e.g. add an env var, bump
+`max_instance_count`, point at a different secret), then:
+
+```bash
+make tf-plan        # optional: preview the change locally
+# commit on a branch, open a PR
+```
+
+On the PR, the **terraform** workflow posts the plan. **Merge to `main`** → it applies
+(after the `production` approval click). Nothing else to run.
+
+> Secret **values** are never in git. Terraform manages the secret *references*; rotate
+> an actual password/cert with `gcloud secrets versions add …` out-of-band.
+
+### Need #3 — ship new code
+
+Just push Go changes to `main` (paths under `*.go`/`go.mod`/`go.sum`). The **deploy**
+workflow builds and rolls out a new revision automatically (gated by `production`).
+Env vars, secrets, scaling, and the runtime SA set by Terraform are preserved — only
+the image changes.
+
+> Need to deploy from your laptop without pushing? `make deploy` runs the exact same
+> `gcloud run deploy` the workflow uses.
+
 Notes:
-- `--entry-point=Expense` matches the `functions.HTTP("Expense", …)` registration in `function.go`.
-- The CA cert (`DB_SSL_ROOT_CERT`) must be deployed alongside the source (it is read at runtime).
-- `--allow-unauthenticated` keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
+- `--function=Expense` matches the `functions.HTTP("Expense", …)` registration in `function.go`.
+- The CA cert and DB password are mounted from Secret Manager by Terraform (not passed on the deploy command).
+- The service is public/unauthenticated — keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
 - Do **not** set `DB_SSL_MODE=disable` in production.
 
 ## Database migrations in CI

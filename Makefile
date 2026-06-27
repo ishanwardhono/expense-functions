@@ -18,3 +18,52 @@ migrate-up:
 	url="cockroachdb://$$DB_USER:$$DB_PASSWORD@$$DB_HOST:$$DB_PORT/$$DB_NAME?sslmode=$$DB_SSL_MODE" && \
 	if [ "$$DB_SSL_MODE" != "disable" ]; then url="$$url&sslrootcert=$$DB_SSL_ROOT_CERT"; fi && \
 	migrate -path migrations -database "$$url" up
+
+# --- Infrastructure as code (Terraform) --------------------------------------
+# Terraform owns the Cloud Run *infrastructure* (service shell, IAM, secret access,
+# scaling, CI auth). Code rollouts go through the GitHub Action / `make deploy`.
+# See terraform/ and docs/ for the full flow. Requires the `terraform` and `gcloud`
+# CLIs and an authenticated gcloud session (`gcloud auth application-default login`).
+PROJECT_ID   ?= weekly-expense
+REGION       ?= asia-southeast1
+SERVICE_NAME ?= expense
+TFSTATE_BUCKET ?= weekly-expense-tfstate
+GH_REPO      ?= ishanwardhono/expense-functions
+
+# One-time: create the GCS bucket that holds Terraform state (must exist before
+# `terraform init` can use the gcs backend).
+tf-bootstrap:
+	gcloud storage buckets create gs://$(TFSTATE_BUCKET) \
+		--project=$(PROJECT_ID) --location=$(REGION) --uniform-bucket-level-access
+	gcloud storage buckets update gs://$(TFSTATE_BUCKET) --versioning
+
+tf-init:
+	cd terraform && terraform init
+
+tf-plan:
+	cd terraform && terraform plan
+
+tf-apply:
+	cd terraform && terraform apply
+
+# Push the Terraform outputs straight into the repo's GitHub Actions variables (no
+# copy-paste). The deploy workflow reads WIF_PROVIDER + DEPLOY_SA_EMAIL; the terraform
+# workflow reads WIF_PROVIDER + TF_INFRA_SA_EMAIL. Requires the `gh` CLI, authenticated
+# (`gh auth login`).
+gh-vars:
+	cd terraform && \
+	gh variable set WIF_PROVIDER     --repo $(GH_REPO) --body "$$(terraform output -raw wif_provider)" && \
+	gh variable set DEPLOY_SA_EMAIL  --repo $(GH_REPO) --body "$$(terraform output -raw deploy_sa_email)" && \
+	gh variable set TF_INFRA_SA_EMAIL --repo $(GH_REPO) --body "$$(terraform output -raw infra_sa_email)"
+	@echo "Set WIF_PROVIDER, DEPLOY_SA_EMAIL, TF_INFRA_SA_EMAIL on $(GH_REPO)"
+
+# --- Code deploy -------------------------------------------------------------
+# Build the Go image and roll out a new revision. Identical to what the GitHub
+# Action runs; use locally to deploy without pushing. Env/secrets/scaling set by
+# Terraform are preserved (only the image/revision changes).
+deploy:
+	gcloud run deploy $(SERVICE_NAME) \
+		--source=. --region=$(REGION) \
+		--function=Expense --project=$(PROJECT_ID)
+
+.PHONY: run run-expense migrate-up tf-bootstrap tf-init tf-plan tf-apply gh-vars deploy

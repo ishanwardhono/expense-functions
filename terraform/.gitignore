@@ -1,0 +1,14 @@
+# Local Terraform working files — never commit state (may contain sensitive values)
+# or the provider cache. The dependency lock file (.terraform.lock.hcl) IS committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Local-only overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
