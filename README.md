@@ -167,36 +167,73 @@ Terraform creates three service accounts, least-privilege:
 CI authenticates via **Workload Identity Federation** (short-lived OIDC tokens) — no
 service-account JSON keys are ever created or stored.
 
-### Prerequisites
+### Need #1 — first-time setup, start to finish (run once)
 
-- CLIs: `gcloud`, `terraform`, and `gh` — all authenticated
-  (`gcloud auth login` + `gcloud auth application-default login`, `gh auth login`).
-- A GCP project, and the two CockroachDB secrets present in Secret Manager
-  (`expense-function-cockroachdb-password`, `expense-cockroachdb-crt`).
-- The `production` Environment configured with required reviewers
-  (GitHub → Settings → Environments) for the approval gates.
+Everything before "Done" below is one-time. The first `terraform apply` runs **locally**
+(the infra SA + its CI login don't exist yet); after that, CI takes over.
 
-### Need #1 — first-time setup (run once)
+**Step 0 — install the tools** (once per machine):
 
-> The first `terraform apply` is run **locally** (the infra SA + its CI login don't
-> exist yet). After this, CI takes over and you rarely touch Terraform from your laptop.
+```bash
+brew install terraform gh      # gcloud assumed already installed
+```
+
+**Step 1 — log in locally:**
+
+```bash
+gcloud auth login                          # your human login
+gcloud auth application-default login      # the credential Terraform actually uses
+gcloud config set project weekly-expense
+gh auth login                              # so `make gh-vars` can set GitHub variables
+```
+
+**Step 2 — confirm the two DB secrets exist** (Terraform references, doesn't create them):
+
+```bash
+gcloud secrets list --filter="name~expense"
+# expect: expense-function-cockroachdb-password  AND  expense-cockroachdb-crt
+```
+
+On a brand-new project, create them first (`gcloud secrets create … && gcloud secrets
+versions add …` for the password, and the CA cert).
+
+**Step 3 — create the infrastructure** (from your laptop, on the repo checkout):
 
 ```bash
 make tf-bootstrap   # create the GCS bucket that stores Terraform state
-make tf-init        # initialise Terraform (downloads the Google provider)
-make tf-apply       # create the service (placeholder image), the 3 SAs, IAM, WIF
+make tf-init        # download the Google provider
+make tf-apply       # review the plan, type "yes" — creates the service + 3 SAs + WIF
 make gh-vars        # push WIF_PROVIDER, DEPLOY_SA_EMAIL, TF_INFRA_SA_EMAIL into GitHub
 ```
 
-Then trigger the first real code deploy (the `tf-apply` left a placeholder image):
-push a commit to `main`, or run the **deploy** workflow via *Run workflow*. Also
-**apply DB migrations** to production first (see
+`make gh-vars` sets the repo **Actions variables** the workflows read (via `gh`, no
+copy-paste). Until they exist, both workflows **skip** (they guard on
+`vars.WIF_PROVIDER`), so they don't fail before the infra exists.
+
+**Step 4 — apply DB migrations to production** (if not already done): the app needs the
+`amplop` schema before it can serve traffic (see
 [Database migrations in CI](#database-migrations-in-ci)).
 
-`make gh-vars` sets the repo **Actions variables** the workflows read, using `gh` — no
-copy-paste. Until those variables exist, both the `deploy` and `terraform` workflows
-**skip** (they guard on `vars.WIF_PROVIDER`), so they don't fail before the infra they
-authenticate against has been created.
+**Step 5 — first code deploy** (`tf-apply` left a placeholder image; replace it once):
+
+```bash
+make deploy         # builds the Go code and rolls out the real revision
+```
+
+**Step 6 — verify:**
+
+```bash
+cd terraform && terraform output -raw service_url      # the public URL
+curl 'https://<that-url>/month?year=2026&month=6'      # expect JSON, not the hello page
+```
+
+**Step 7 — merge the infra PR** so both workflows live on `main` and the automation is active.
+
+**Step 8 (optional, recommended) — turn on the approval gates:** GitHub → Settings →
+Environments → **New environment** → `production` → add yourself as a required reviewer.
+Without it, deploys/applies just run automatically (no pause).
+
+**Done.** From here on, use Need #2 and Need #3 below.
 
 ### Need #2 — change infrastructure
 
