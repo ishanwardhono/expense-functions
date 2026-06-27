@@ -1,0 +1,91 @@
+# Infrastructure CI for the terraform/ module. Two jobs:
+#   - plan  → on PRs that touch terraform/**: shows what WOULD change (no mutation),
+#             posted to the PR's checks summary so the diff is reviewable.
+#   - apply → on merge to main (or manual dispatch): applies the change, gated by the
+#             `production` Environment approval so it pauses for one click.
+#
+# Authenticates as the dedicated infra SA via Workload Identity Federation (no key).
+# That SA is powerful (manages IAM/SAs/secrets/WIF) — impersonation is locked to this
+# repo by the WIF binding, and apply is gated by the approval environment.
+#
+# Required repo Actions variables (set once via `make gh-vars`):
+#   WIF_PROVIDER       — the WIF provider resource name
+#   TF_INFRA_SA_EMAIL  — the infra SA email
+name: terraform
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: terraform
+
+jobs:
+  plan:
+    # Skip until the one-time setup has populated the CI variables (make tf-apply +
+    # make gh-vars). Avoids a red check on the PR that first introduces this workflow,
+    # before the WIF infra it authenticates against exists.
+    if: github.event_name == 'pull_request' && vars.WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # mint the OIDC token for WIF
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.TF_INFRA_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - run: terraform init
+
+      - name: Terraform plan
+        id: plan
+        run: |
+          terraform plan -no-color -input=false | tee plan.txt
+          {
+            echo '### Terraform plan';
+            echo '```';
+            cat plan.txt;
+            echo '```';
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    # Anything that isn't a PR: merge to main or manual dispatch. Also skipped until
+    # the CI variables are configured (see the plan job).
+    if: github.event_name != 'pull_request' && vars.WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    # Approval gate before any infra mutation (GitHub → Settings → Environments →
+    # production → required reviewers).
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.TF_INFRA_SA_EMAIL }}
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - run: terraform init
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -input=false

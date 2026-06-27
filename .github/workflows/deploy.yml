@@ -1,0 +1,57 @@
+# Code deploy: on push to main, build the Go image and roll out a new Cloud Run
+# revision for the single routed `Expense` function. This owns the *image* only —
+# env vars, secrets, scaling, and the runtime SA are managed by Terraform (terraform/)
+# and preserved across deploys (gcloud run deploy leaves unspecified config untouched).
+#
+# Auth is via Workload Identity Federation (no SA JSON key). The WIF provider and
+# deployer SA are provisioned by Terraform; wire their values in as repo variables:
+#   WIF_PROVIDER    = `terraform output -raw wif_provider`
+#   DEPLOY_SA_EMAIL = `terraform output -raw deploy_sa_email`
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: weekly-expense
+  REGION: asia-southeast1
+  SERVICE_NAME: expense
+
+jobs:
+  deploy:
+    # Skip until the one-time setup has populated the CI variables (make tf-apply +
+    # make gh-vars). Avoids a red check before the WIF infra exists.
+    if: vars.WIF_PROVIDER != ''
+    runs-on: ubuntu-latest
+    # Approval gate before prod rollout (GitHub → Settings → Environments →
+    # production → required reviewers), mirroring migrations-deploy.
+    environment: production
+    permissions:
+      id-token: write # mint the OIDC token for WIF
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA_EMAIL }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE_NAME" \
+            --source=. \
+            --region="$REGION" \
+            --function=Expense \
+            --project="$PROJECT_ID"

@@ -3,7 +3,12 @@ version: '3.8'
 services:
   # The single routed Expense function (spec §4.2).
   expense:
-    build: .
+    build:
+      context: .
+      # Dev-only image. Named Dockerfile.dev (not "Dockerfile") so that
+      # `gcloud run deploy --source` does NOT pick it up and instead builds with
+      # Cloud buildpacks via --function=Expense.
+      dockerfile: Dockerfile.dev
     ports:
       - "8080:8080"
     volumes:

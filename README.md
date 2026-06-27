@@ -128,29 +128,168 @@ DB_HOST=localhost DB_PORT=26257 DB_USER=root DB_PASSWORD= DB_NAME=devdb DB_SSL_M
   go test -tags integration ./...
 ```
 
-## Deploy
+## Infrastructure & deployment
 
-Production target is the single `Expense` Cloud Function over the production
-CockroachDB (`defaultdb`) with `DB_SSL_MODE=verify-full` (requires the CA cert).
-**Apply migrations to the production database before the first deploy** (see
-[Database migrations in CI](#database-migrations-in-ci)).
+Everything is code — no console clicks. There are **three things you ever do**, and
+each maps to a clear command or a git push:
+
+| # | You want to… | How |
+|---|---|---|
+| 1 | **Create the function** on a (new) GCP account | run the one-time setup commands below |
+| 2 | **Change infra** (an env var, scaling, a secret reference) | edit `terraform/main.tf`, open a PR, merge → auto-applies |
+| 3 | **Ship new code** | push Go changes to `main` → auto-deploys |
+
+### How it fits together
+
+- **`terraform/main.tf`** is the infrastructure (what the console used to hold): the
+  single `expense` Cloud Run service (region `asia-southeast1`, over production
+  `defaultdb`, `DB_SSL_MODE=verify-full`), its runtime service account, Secret Manager
+  access, and the CI login (Workload Identity Federation). All editable config sits in
+  the `locals` block at the top of the file. State lives in a GCS bucket.
+- **Two GitHub workflows** do the automation, each on its own trigger:
+  - **`deploy.yml`** — on push to `main` touching `*.go` → builds the image and rolls
+    out a new Cloud Run revision (your **need #3**).
+  - **`terraform.yml`** — on a PR touching `terraform/**` it posts a **plan**; on merge
+    to `main` it **applies** (your **need #2**). Both behind the `production` approval gate.
+- The two never fight over the container image: a `lifecycle { ignore_changes = [image] }`
+  on the service lets `deploy.yml` own the image while Terraform owns everything else.
+
+### Identities (who can do what)
+
+Terraform creates three service accounts, least-privilege:
+
+| SA | Used by | Can |
+|---|---|---|
+| `expense-runtime` | the running service | read the 2 DB secrets |
+| `expense-deployer` | `deploy.yml` | build + deploy a revision |
+| `expense-infra` | `terraform.yml` apply | manage the whole module (IAM, SAs, secrets, WIF) — powerful; impersonation is locked to this repo and apply is gated |
+
+CI authenticates via **Workload Identity Federation** (short-lived OIDC tokens) — no
+service-account JSON keys are ever created or stored.
+
+### Need #1 — first-time setup, start to finish (run once)
+
+Everything before "Done" below is one-time. The first `terraform apply` runs **locally**
+(the infra SA + its CI login don't exist yet); after that, CI takes over.
+
+**Step 0 — install the tools** (once per machine):
 
 ```bash
-gcloud functions deploy Expense \
-  --gen2 \
-  --runtime=go121 \
-  --region=asia-southeast2 \
-  --trigger-http \
-  --allow-unauthenticated \
-  --entry-point=Expense \
-  --set-env-vars=DB_HOST=...,DB_PORT=...,DB_USER=...,DB_PASSWORD=...,DB_NAME=defaultdb,DB_SSL_MODE=verify-full,DB_SSL_ROOT_CERT=ca.crt
+# Terraform lives in HashiCorp's tap, not Homebrew core:
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform
+brew install gh                # gcloud assumed already installed
 ```
 
+**Step 1 — log in locally:**
+
+```bash
+gcloud auth login                          # your human login
+gcloud auth application-default login      # the credential Terraform actually uses
+gcloud config set project weekly-expense
+gh auth login                              # so `make gh-vars` can set GitHub variables
+```
+
+**Step 2 — confirm the two DB secrets exist** (Terraform references, doesn't create them):
+
+```bash
+gcloud secrets list --filter="name~expense"
+# expect: expense-function-cockroachdb-password  AND  expense-cockroachdb-crt
+```
+
+On a brand-new project, create them first (`gcloud secrets create … && gcloud secrets
+versions add …` for the password, and the CA cert).
+
+**Step 3 — create the infrastructure** (from your laptop, on the repo checkout):
+
+```bash
+make tf-bootstrap   # create the GCS bucket that stores Terraform state
+make tf-init        # download the Google provider
+make tf-apply       # review the plan, type "yes" — creates the service + 3 SAs + WIF
+make gh-vars        # push WIF_PROVIDER, DEPLOY_SA_EMAIL, TF_INFRA_SA_EMAIL into GitHub
+```
+
+`make gh-vars` sets the repo **Actions variables** the workflows read (via `gh`, no
+copy-paste). Until they exist, both workflows **skip** (they guard on
+`vars.WIF_PROVIDER`), so they don't fail before the infra exists.
+
+**Step 4 — apply DB migrations to production** (if not already done): the app needs the
+`amplop` schema before it can serve traffic (see
+[Database migrations in CI](#database-migrations-in-ci)).
+
+**Step 5 — first code deploy** (`tf-apply` left a placeholder image; replace it once):
+
+```bash
+make deploy         # builds the Go code and rolls out the real revision
+```
+
+**Step 6 — verify:**
+
+```bash
+cd terraform && terraform output -raw service_url      # the public URL
+curl 'https://<that-url>/month?year=2026&month=6'      # expect JSON, not the hello page
+```
+
+**Step 7 — merge the infra PR** so both workflows live on `main` and the automation is active.
+
+**Step 8 (optional, recommended) — turn on the approval gates:** GitHub → Settings →
+Environments → **New environment** → `production` → add yourself as a required reviewer.
+Without it, deploys/applies just run automatically (no pause).
+
+**Done.** From here on, use Need #2 and Need #3 below.
+
+### Need #2 — change infrastructure
+
+Edit the value in the `locals` block of `terraform/main.tf` (e.g. add an env var, bump
+`max_instance_count`, point at a different secret), then:
+
+```bash
+make tf-plan        # optional: preview the change locally
+# commit on a branch, open a PR
+```
+
+On the PR, the **terraform** workflow posts the plan. **Merge to `main`** → it applies
+(after the `production` approval click). Nothing else to run.
+
+> Secret **values** are never in git. Terraform manages the secret *references*; rotate
+> an actual password/cert with `gcloud secrets versions add …` out-of-band.
+
+### Need #3 — ship new code
+
+Just push Go changes to `main` (paths under `*.go`/`go.mod`/`go.sum`). The **deploy**
+workflow builds and rolls out a new revision automatically (gated by `production`).
+Env vars, secrets, scaling, and the runtime SA set by Terraform are preserved — only
+the image changes.
+
+> Need to deploy from your laptop without pushing? `make deploy` runs the exact same
+> `gcloud run deploy` the workflow uses.
+
 Notes:
-- `--entry-point=Expense` matches the `functions.HTTP("Expense", …)` registration in `function.go`.
-- The CA cert (`DB_SSL_ROOT_CERT`) must be deployed alongside the source (it is read at runtime).
-- `--allow-unauthenticated` keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
+- `--function=Expense` matches the `functions.HTTP("Expense", …)` registration in `function.go`.
+- The CA cert and DB password are mounted from Secret Manager by Terraform (not passed on the deploy command).
+- The service is public/unauthenticated — keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
 - Do **not** set `DB_SSL_MODE=disable` in production.
+
+### Cost
+
+For a single user with `max_instance_count = 1`, this runs comfortably inside the GCP
+**Always Free** tier (2M Cloud Run requests, 180k vCPU-sec, 360k GiB-sec, 2,500 Cloud
+Build minutes/month) — effectively **$0/month**. Linking a billing account moves the
+Firebase project to the **Blaze** plan, which is expected: Blaze just means "billing
+attached" and still includes all the free quotas.
+
+- The one cost that quietly grows is **Artifact Registry storage** (0.5 GB free) — each
+  deploy adds an image. Terraform owns the `cloud-run-source-deploy` repo with a
+  **cleanup policy** (keep the 5 most recent, delete images older than 30 days) so it
+  never creeps past the free tier.
+- **On an existing project** the repo likely already exists (from a prior deploy), so
+  import it before the first apply:
+  ```bash
+  cd terraform && terraform import google_artifact_registry_repository.images \
+    projects/weekly-expense/locations/asia-southeast1/repositories/cloud-run-source-deploy
+  ```
+- Recommended safety net: set a **budget alert** (Console → Billing → Budgets & alerts),
+  e.g. $5/month with alerts at 50/90/100%. It emails you; it does not cap spend.
 
 ## Database migrations in CI
 

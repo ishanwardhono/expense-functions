@@ -1,0 +1,34 @@
+# .gcloudignore — controls what `gcloud ... --source` uploads as the build context.
+#
+# `gcloud run deploy --source` builds with Cloud buildpacks (functions-framework via
+# --function=Expense) because there is no file named `Dockerfile` at the root — the
+# dev image is `Dockerfile.dev`, which gcloud does not auto-detect. This file just
+# keeps secrets and dev/infra noise out of the uploaded build context.
+#
+# NOTE: when this file exists, gcloud does NOT also apply .gitignore — so secrets and
+# local-only files must be listed here explicitly.
+
+# Dev container — never built in the cloud (buildpacks are used instead).
+Dockerfile.dev
+docker-compose.yml
+
+# Secrets / local env — never upload into a build context.
+.env
+*.crt
+debug.go
+
+# VCS & tooling.
+.git/
+.gitignore
+.github/
+.vscode/
+
+# Infra / docs — not needed to build the app.
+terraform/
+docs/
+*.md
+
+# Build artifacts.
+main
+*.exe
+*.exe~
