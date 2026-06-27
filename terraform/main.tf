@@ -311,12 +311,12 @@ resource "google_service_account" "infra" {
 
 resource "google_project_iam_member" "infra_roles" {
   for_each = toset([
-    "roles/run.admin",                        # manage the Cloud Run service + its IAM
-    "roles/iam.serviceAccountAdmin",          # create/manage the runtime/deploy/infra SAs
-    "roles/iam.workloadIdentityPoolAdmin",    # manage the WIF pool/provider
-    "roles/resourcemanager.projectIamAdmin",  # set project-level IAM bindings
-    "roles/secretmanager.admin",              # manage secret IAM (not values)
-    "roles/serviceusage.serviceUsageAdmin",   # enable required APIs
+    "roles/run.admin",                       # manage the Cloud Run service + its IAM
+    "roles/iam.serviceAccountAdmin",         # create/manage the runtime/deploy/infra SAs
+    "roles/iam.workloadIdentityPoolAdmin",   # manage the WIF pool/provider
+    "roles/resourcemanager.projectIamAdmin", # set project-level IAM bindings
+    "roles/secretmanager.admin",             # manage secret IAM (not values)
+    "roles/serviceusage.serviceUsageAdmin",  # enable required APIs
   ])
 
   project = local.project_id
