@@ -270,6 +270,27 @@ Notes:
 - The service is public/unauthenticated — keeps the v2 "no auth, `CORS: *`" model; CORS is handled in-app (`internal/platform/httpx`).
 - Do **not** set `DB_SSL_MODE=disable` in production.
 
+### Cost
+
+For a single user with `max_instance_count = 1`, this runs comfortably inside the GCP
+**Always Free** tier (2M Cloud Run requests, 180k vCPU-sec, 360k GiB-sec, 2,500 Cloud
+Build minutes/month) — effectively **$0/month**. Linking a billing account moves the
+Firebase project to the **Blaze** plan, which is expected: Blaze just means "billing
+attached" and still includes all the free quotas.
+
+- The one cost that quietly grows is **Artifact Registry storage** (0.5 GB free) — each
+  deploy adds an image. Terraform owns the `cloud-run-source-deploy` repo with a
+  **cleanup policy** (keep the 5 most recent, delete images older than 30 days) so it
+  never creeps past the free tier.
+- **On an existing project** the repo likely already exists (from a prior deploy), so
+  import it before the first apply:
+  ```bash
+  cd terraform && terraform import google_artifact_registry_repository.images \
+    projects/weekly-expense/locations/asia-southeast1/repositories/cloud-run-source-deploy
+  ```
+- Recommended safety net: set a **budget alert** (Console → Billing → Budgets & alerts),
+  e.g. $5/month with alerts at 50/90/100%. It emails you; it does not cap spend.
+
 ## Database migrations in CI
 
 Two GitHub Actions workflows manage migrations:

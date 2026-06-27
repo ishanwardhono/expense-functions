@@ -93,12 +93,51 @@ resource "google_project_service" "required" {
 }
 
 # ---------------------------------------------------------------------------
+# Artifact Registry — image repo + cleanup policy
+# ---------------------------------------------------------------------------
+# `gcloud run deploy --source` pushes built images to a repo named
+# `cloud-run-source-deploy`. Terraform owns it so a cleanup policy keeps only the
+# most recent images — otherwise every deploy adds an image that lives forever and
+# Artifact Registry storage slowly creeps past the 0.5 GB free tier.
+#
+# NOTE on an existing project: if this repo already exists (e.g. created by a prior
+# `gcloud run deploy`), import it before the first apply, then apply to attach the
+# policy:
+#   terraform import google_artifact_registry_repository.images \
+#     projects/<project>/locations/<region>/repositories/cloud-run-source-deploy
+resource "google_artifact_registry_repository" "images" {
+  location      = local.region
+  repository_id = "cloud-run-source-deploy"
+  format        = "DOCKER"
+  description   = "Container images built by `gcloud run deploy --source`."
+
+  # Keep at least the 5 most recent images (protects rollback targets even if old)...
+  cleanup_policies {
+    id     = "keep-recent-5"
+    action = "KEEP"
+    most_recent_versions {
+      keep_count = 5
+    }
+  }
+
+  # ...and delete anything older than 30 days. KEEP wins over DELETE, so the 5 most
+  # recent are never removed even once they age out.
+  cleanup_policies {
+    id     = "delete-older-than-30d"
+    action = "DELETE"
+    condition {
+      older_than = "2592000s" # 30 days
+    }
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+# ---------------------------------------------------------------------------
 # Existing secrets (referenced, not owned)
 # ---------------------------------------------------------------------------
 # Hold live credentials — read as data sources and granted access, never recreated
-# (which would drop the stored versions). The Artifact Registry repo that holds built
-# images is auto-created by the first `gcloud run deploy --source`, so it is
-# intentionally not managed here.
+# (which would drop the stored versions).
 data "google_secret_manager_secret" "db_password" {
   secret_id = local.db_password_secret
 }
@@ -317,6 +356,7 @@ resource "google_project_iam_member" "infra_roles" {
     "roles/resourcemanager.projectIamAdmin", # set project-level IAM bindings
     "roles/secretmanager.admin",             # manage secret IAM (not values)
     "roles/serviceusage.serviceUsageAdmin",  # enable required APIs
+    "roles/artifactregistry.admin",          # manage the image repo + cleanup policy
   ])
 
   project = local.project_id
