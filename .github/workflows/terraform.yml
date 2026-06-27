@@ -31,7 +31,10 @@ defaults:
 
 jobs:
   plan:
-    if: github.event_name == 'pull_request'
+    # Skip until the one-time setup has populated the CI variables (make tf-apply +
+    # make gh-vars). Avoids a red check on the PR that first introduces this workflow,
+    # before the WIF infra it authenticates against exists.
+    if: github.event_name == 'pull_request' && vars.WIF_PROVIDER != ''
     runs-on: ubuntu-latest
     permissions:
       id-token: write # mint the OIDC token for WIF
@@ -61,8 +64,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   apply:
-    # Anything that isn't a PR: merge to main or manual dispatch.
-    if: github.event_name != 'pull_request'
+    # Anything that isn't a PR: merge to main or manual dispatch. Also skipped until
+    # the CI variables are configured (see the plan job).
+    if: github.event_name != 'pull_request' && vars.WIF_PROVIDER != ''
     runs-on: ubuntu-latest
     # Approval gate before any infra mutation (GitHub → Settings → Environments →
     # production → required reviewers).

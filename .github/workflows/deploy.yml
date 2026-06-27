@@ -26,6 +26,9 @@ env:
 
 jobs:
   deploy:
+    # Skip until the one-time setup has populated the CI variables (make tf-apply +
+    # make gh-vars). Avoids a red check before the WIF infra exists.
+    if: vars.WIF_PROVIDER != ''
     runs-on: ubuntu-latest
     # Approval gate before prod rollout (GitHub → Settings → Environments →
     # production → required reviewers), mirroring migrations-deploy.

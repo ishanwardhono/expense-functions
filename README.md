@@ -194,7 +194,9 @@ push a commit to `main`, or run the **deploy** workflow via *Run workflow*. Also
 [Database migrations in CI](#database-migrations-in-ci)).
 
 `make gh-vars` sets the repo **Actions variables** the workflows read, using `gh` — no
-copy-paste.
+copy-paste. Until those variables exist, both the `deploy` and `terraform` workflows
+**skip** (they guard on `vars.WIF_PROVIDER`), so they don't fail before the infra they
+authenticate against has been created.
 
 ### Need #2 — change infrastructure
 
