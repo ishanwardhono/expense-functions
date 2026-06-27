@@ -175,7 +175,10 @@ Everything before "Done" below is one-time. The first `terraform apply` runs **l
 **Step 0 — install the tools** (once per machine):
 
 ```bash
-brew install terraform gh      # gcloud assumed already installed
+# Terraform lives in HashiCorp's tap, not Homebrew core:
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform
+brew install gh                # gcloud assumed already installed
 ```
 
 **Step 1 — log in locally:**
