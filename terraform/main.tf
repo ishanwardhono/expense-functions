@@ -36,10 +36,6 @@ locals {
   region       = "asia-southeast1"
   service_name = "expense"
 
-  # GCS bucket holding Terraform state (created by `make tf-bootstrap`). Must match
-  # the bucket in the `backend "gcs"` block above and the Makefile's TFSTATE_BUCKET.
-  tfstate_bucket = "weekly-expense-tfstate"
-
   # owner/name of the GitHub repo allowed to deploy via Workload Identity Federation.
   github_repo = "ishanwardhono/expense-functions"
 
@@ -242,14 +238,18 @@ resource "google_cloud_run_v2_service" "expense" {
     }
   }
 
-  # The deploy pipeline (gcloud run deploy --source) owns image rollouts. Ignore the
-  # image plus the client tags gcloud stamps on each deploy, so `terraform plan`
-  # stays clean after a code deploy.
+  # The deploy pipeline (gcloud run deploy --source) owns image rollouts. Ignore what
+  # gcloud stamps on each source deploy so `terraform plan` stays clean afterward:
+  #   - the rolled-out image and client tags, and
+  #   - the top-level build_config + service-level scaling blocks gcloud adds (these
+  #     are distinct from the template.scaling.max_instance_count we manage above).
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
       client,
       client_version,
+      build_config,
+      scaling,
     ]
   }
 
