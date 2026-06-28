@@ -49,9 +49,14 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy to Cloud Run
+        env:
+          # Run the source build as the deployer SA itself (not the default compute
+          # SA), so the build has the exact roles Terraform grants it.
+          DEPLOY_SA_EMAIL: ${{ vars.DEPLOY_SA_EMAIL }}
         run: |
           gcloud run deploy "$SERVICE_NAME" \
             --source=. \
             --region="$REGION" \
             --function=Expense \
+            --build-service-account="$DEPLOY_SA_EMAIL" \
             --project="$PROJECT_ID"
