@@ -304,14 +304,17 @@ resource "google_service_account" "deploy" {
   display_name = "Expense v2 CI deployer SA"
 }
 
-# Roles needed to build (Cloud Build buildpacks), push the image (Artifact Registry),
-# stage the source (GCS), and roll out a new Cloud Run revision.
+# Roles needed to submit the build (Cloud Build), and — since the deploy SA is also
+# the build service account (see deploy.yml's --build-service-account) — to write
+# build logs (logging.logWriter), push the image (Artifact Registry), and stage the
+# source (GCS), plus roll out a new Cloud Run revision.
 resource "google_project_iam_member" "deploy_roles" {
   for_each = toset([
     "roles/run.developer",
     "roles/cloudbuild.builds.editor",
     "roles/artifactregistry.writer",
     "roles/storage.admin",
+    "roles/logging.logWriter",
   ])
 
   project = local.project_id
@@ -322,6 +325,16 @@ resource "google_project_iam_member" "deploy_roles" {
 # The deploy SA must be able to deploy the service *as* the runtime SA.
 resource "google_service_account_iam_member" "deploy_act_as_runtime" {
   service_account_id = google_service_account.runtime.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+# `gcloud run deploy --source` runs a Cloud Build as the build service account.
+# We pass the deploy SA itself (deploy.yml --build-service-account), so it must be
+# able to act as itself — Cloud Build requires the submitter to have act-as on the
+# build SA. This avoids depending on the project's default compute SA.
+resource "google_service_account_iam_member" "deploy_act_as_self" {
+  service_account_id = google_service_account.deploy.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
@@ -364,12 +377,11 @@ resource "google_project_iam_member" "infra_roles" {
   member  = "serviceAccount:${google_service_account.infra.email}"
 }
 
-# Read/write the Terraform state objects in the state bucket.
-resource "google_storage_bucket_iam_member" "infra_state" {
-  bucket = local.tfstate_bucket
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.infra.email}"
-}
+# NOTE: the infra SA's access to the state bucket is granted out-of-band (one-time
+# setup: `make tf-grant-state`), NOT here. Managing that bucket-IAM binding from
+# inside this module would be a bootstrap chicken-and-egg — reconciling it requires
+# storage.buckets.getIamPolicy, which the infra SA (object-level state access only)
+# lacks, so the apply would 403 on its own state bucket.
 
 # Apply the Cloud Run service *as* the runtime SA.
 resource "google_service_account_iam_member" "infra_act_as_runtime" {

@@ -29,6 +29,8 @@ REGION       ?= asia-southeast1
 SERVICE_NAME ?= expense
 TFSTATE_BUCKET ?= weekly-expense-tfstate
 GH_REPO      ?= ishanwardhono/expense-functions
+DEPLOY_SA    ?= $(SERVICE_NAME)-deployer@$(PROJECT_ID).iam.gserviceaccount.com
+INFRA_SA     ?= $(SERVICE_NAME)-infra@$(PROJECT_ID).iam.gserviceaccount.com
 
 # One-time: create the GCS bucket that holds Terraform state (must exist before
 # `terraform init` can use the gcs backend).
@@ -36,6 +38,15 @@ tf-bootstrap:
 	gcloud storage buckets create gs://$(TFSTATE_BUCKET) \
 		--project=$(PROJECT_ID) --location=$(REGION) --uniform-bucket-level-access
 	gcloud storage buckets update gs://$(TFSTATE_BUCKET) --versioning
+
+# One-time (after the first `tf-apply` creates the infra SA): grant that SA
+# read/write on the Terraform state objects. Done out-of-band — not in the module —
+# because the infra SA can't manage its own state-bucket IAM from inside its own
+# apply (it lacks bucket-level getIamPolicy). Run by an owner with bucket admin.
+tf-grant-state:
+	gcloud storage buckets add-iam-policy-binding gs://$(TFSTATE_BUCKET) \
+		--member="serviceAccount:$(INFRA_SA)" \
+		--role="roles/storage.objectAdmin"
 
 tf-init:
 	cd terraform && terraform init
@@ -64,6 +75,7 @@ gh-vars:
 deploy:
 	gcloud run deploy $(SERVICE_NAME) \
 		--source=. --region=$(REGION) \
-		--function=Expense --project=$(PROJECT_ID)
+		--function=Expense --build-service-account=$(DEPLOY_SA) \
+		--project=$(PROJECT_ID)
 
-.PHONY: run run-expense migrate-up tf-bootstrap tf-init tf-plan tf-apply gh-vars deploy
+.PHONY: run run-expense migrate-up tf-bootstrap tf-grant-state tf-init tf-plan tf-apply gh-vars deploy

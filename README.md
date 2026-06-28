@@ -206,8 +206,14 @@ versions add …` for the password, and the CA cert).
 make tf-bootstrap   # create the GCS bucket that stores Terraform state
 make tf-init        # download the Google provider
 make tf-apply       # review the plan, type "yes" — creates the service + 3 SAs + WIF
+make tf-grant-state # let the infra SA read/write state (so CI applies can run)
 make gh-vars        # push WIF_PROVIDER, DEPLOY_SA_EMAIL, TF_INFRA_SA_EMAIL into GitHub
 ```
+
+`make tf-grant-state` grants the `expense-infra` SA `roles/storage.objectAdmin` on
+the state bucket. It is done here (out-of-band, by you) rather than in the module:
+the infra SA can't manage its own state-bucket IAM from inside its own apply, so
+Terraform owning that binding would 403 every CI apply.
 
 `make gh-vars` sets the repo **Actions variables** the workflows read (via `gh`, no
 copy-paste). Until they exist, both workflows **skip** (they guard on
@@ -237,6 +243,24 @@ Environments → **New environment** → `production` → add yourself as a requ
 Without it, deploys/applies just run automatically (no pause).
 
 **Done.** From here on, use Need #2 and Need #3 below.
+
+### Decommissioning the v1 functions (one-time)
+
+The v2 backend is a **single** `expense` Cloud Run service (`--function=Expense`).
+If the project still holds the old v1 functions (`WeeklyGet`, `MonthlyGet`,
+`RecapGet`, `hello`, …) from before the rewrite, delete them so only `expense`
+remains. These are not Terraform-managed — remove them out-of-band with `gcloud`:
+
+```bash
+# Discover what's still deployed
+gcloud functions list --project=weekly-expense
+gcloud run services list --project=weekly-expense --region=asia-southeast1
+
+# Delete each stale v1 function (keep `expense`):
+gcloud functions delete <NAME> --region=asia-southeast1 --project=weekly-expense
+# …or, if it shows up as a Cloud Run service instead:
+gcloud run services delete <NAME> --region=asia-southeast1 --project=weekly-expense
+```
 
 ### Need #2 — change infrastructure
 
