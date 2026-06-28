@@ -75,7 +75,8 @@ gh-vars:
 deploy:
 	gcloud run deploy $(SERVICE_NAME) \
 		--source=. --region=$(REGION) \
-		--function=Expense --build-service-account=$(DEPLOY_SA) \
+		--function=Expense \
+		--build-service-account=projects/$(PROJECT_ID)/serviceAccounts/$(DEPLOY_SA) \
 		--project=$(PROJECT_ID)
 
 .PHONY: run run-expense migrate-up tf-bootstrap tf-grant-state tf-init tf-plan tf-apply gh-vars deploy

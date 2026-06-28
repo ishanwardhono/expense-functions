@@ -58,5 +58,5 @@ jobs:
             --source=. \
             --region="$REGION" \
             --function=Expense \
-            --build-service-account="$DEPLOY_SA_EMAIL" \
+            --build-service-account="projects/$PROJECT_ID/serviceAccounts/$DEPLOY_SA_EMAIL" \
             --project="$PROJECT_ID"
