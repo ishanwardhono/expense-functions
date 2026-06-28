@@ -36,10 +36,6 @@ locals {
   region       = "asia-southeast1"
   service_name = "expense"
 
-  # GCS bucket holding Terraform state (created by `make tf-bootstrap`). Must match
-  # the bucket in the `backend "gcs"` block above and the Makefile's TFSTATE_BUCKET.
-  tfstate_bucket = "weekly-expense-tfstate"
-
   # owner/name of the GitHub repo allowed to deploy via Workload Identity Federation.
   github_repo = "ishanwardhono/expense-functions"
 
