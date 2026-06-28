@@ -55,6 +55,9 @@ jobs:
       - name: Terraform plan
         id: plan
         run: |
+          # pipefail so a failed `terraform plan` fails the step — without it the
+          # pipe's exit status is tee's (0) and a real plan error passes silently.
+          set -o pipefail
           terraform plan -no-color -input=false | tee plan.txt
           {
             echo '### Terraform plan';
