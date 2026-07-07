@@ -276,7 +276,7 @@ Operates on the **already-resolved** month context (config + subscription set pa
 - `Langganan` → **langganan** (any day).
 - `Belanja` or `Cash` → **belanja** (any day).
 - `Makan` or `Jajan` → weekend day ⇒ **weekend**, else **belanja**.
-- `Lainnya` → weekend day ⇒ **weekend**, else **fleksibel**.
+- `Lainnya` → **fleksibel** (any day).
 
 "weekend day" = Saturday or Sunday. (This extends `amplopOf` with the Langganan case; subscription payments are now ordinary expenses, so no separate handling.)
 

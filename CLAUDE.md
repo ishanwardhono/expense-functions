@@ -67,7 +67,7 @@ migrations/            0001_init_amplop.sql
 
 Key cross-cutting domain rules (full detail in the spec — these require reading several prototype files to grasp, so they are summarized here):
 
-- **Four envelopes, derived (not stored)** from an expense's category + day-of-week: `belanja` (Belanja/Cash any day; Makan/Jajan on weekdays), `weekend` (Makan/Jajan/Lainnya on Sat–Sun), `fleksibel` (Lainnya on weekdays), `langganan` (category Langganan). See `EnvelopeOf` (spec §6.1).
+- **Four envelopes, derived (not stored)** from an expense's category + day-of-week: `belanja` (Belanja/Cash any day; Makan/Jajan on weekdays), `weekend` (Makan/Jajan on Sat–Sun), `fleksibel` (Lainnya any day), `langganan` (category Langganan). See `EnvelopeOf` (spec §6.1).
 - **Month boundaries:** a shopping week (Mon–Sun) belongs to the month of its **Friday**; a weekend (Sat+Sun) to the month of its **Saturday**. A transaction can show in month *M*'s calendar yet count toward a neighbor month's envelope (spec §6.2). No carry-over between days/weeks.
 - **Effective-date resolution** (spec §5.1/§5.2): the engine stays pure by receiving the *resolved* config + subscription set; versioning logic lives in the repo/service.
 

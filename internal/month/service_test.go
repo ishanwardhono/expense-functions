@@ -50,7 +50,7 @@ func TestDashboard_Assembly(t *testing.T) {
 	exps := []expense.Expense{
 		exp(timeutil.Date(2026, 6, 15), 18_000, "Makan", nil),        // weekday → belanja, June week
 		exp(timeutil.Date(2026, 6, 5), 186_000, "Langganan", &subID), // langganan, paid
-		exp(timeutil.Date(2026, 6, 16), 8_000, "Lainnya", nil),       // weekday → fleksibel
+		exp(timeutil.Date(2026, 6, 16), 8_000, "Lainnya", nil),       // Lainnya → fleksibel
 		exp(timeutil.Date(2026, 6, 29), 50_000, "Belanja", nil),      // week owned by July's Friday
 	}
 
