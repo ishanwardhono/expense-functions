@@ -34,8 +34,8 @@ func TestEnvelopeOf(t *testing.T) {
 		{"Jajan weekday", CatJajan, weekday, EnvBelanja},
 		{"Jajan weekend", CatJajan, saturday, EnvWeekend},
 		{"Lainnya weekday", CatLainnya, weekday, EnvFleksibel},
-		{"Lainnya saturday", CatLainnya, saturday, EnvWeekend},
-		{"Lainnya sunday", CatLainnya, sunday, EnvWeekend},
+		{"Lainnya saturday", CatLainnya, saturday, EnvFleksibel},
+		{"Lainnya sunday", CatLainnya, sunday, EnvFleksibel},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -76,7 +76,7 @@ func isWeekend(date time.Time) bool {
 //   - Langganan        → langganan (any day)
 //   - Belanja / Cash   → belanja (any day)
 //   - Makan / Jajan    → weekend on Sat/Sun, else belanja
-//   - Lainnya          → weekend on Sat/Sun, else fleksibel
+//   - Lainnya          → fleksibel (any day)
 func EnvelopeOf(cat Category, date time.Time) EnvelopeID {
 	switch cat {
 	case CatLangganan:
@@ -89,9 +89,6 @@ func EnvelopeOf(cat Category, date time.Time) EnvelopeID {
 		}
 		return EnvBelanja
 	case CatLainnya:
-		if isWeekend(date) {
-			return EnvWeekend
-		}
 		return EnvFleksibel
 	}
 	// Unknown category: treat as flexible (defensive; validation rejects these).
