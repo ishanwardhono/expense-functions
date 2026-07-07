@@ -65,3 +65,28 @@ _None._
   `functions.HTTP("Expense", …)`, defaultdb + verify-full.
 - Chicken-and-egg: first `tf-apply` runs locally under user ADC (not WIF), so
   the infra SA + WIF login need not pre-exist. Sound.
+
+---
+
+# Review — PR #20 (fix: attribute Lainnya to Fleksibel on any day)
+
+Small domain-logic change to `EnvelopeOf`. First review.
+
+## Blocking
+
+_None._
+
+## Resolved / Verified
+
+- `EnvelopeOf` (internal/envelope/rules.go:91-92): `CatLainnya` now returns
+  `EnvFleksibel` unconditionally; weekend branch removed. Doc comment (line 79)
+  updated. Correct.
+- Tests (internal/envelope/engine_test.go:37-38): the two weekend `Lainnya`
+  cases now expect `EnvFleksibel`. Weekday case retained. `Makan`/`Jajan`
+  weekend cases unchanged and still assert `EnvWeekend`.
+- No regression in the June2026 seed: its `Lainnya` entries (Jun 3, Jun 9) are
+  weekdays → `FlexSpent`=38000, `WkndSpent`=178000 unchanged.
+- Docs in sync: spec §6.1 (line 279) and CLAUDE.md envelope summary (line 70)
+  both updated to "Lainnya → fleksibel (any day)".
+- Envelopes derived at read time → no DB migration required. Confirmed.
+- go build / go vet / gofmt / go test all clean.
