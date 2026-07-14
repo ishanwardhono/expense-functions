@@ -1,6 +1,7 @@
 # Amplop v2 Backend — Design & Implementation Plan
 
 **Date:** 2026-06-15
+**Amended:** 2026-07-14 — D9 Fleksibel rollover (§6.6, Phase 6)
 **Status:** Approved design — ready for implementation next session
 **Scope:** Complete rewrite of the expense-functions backend to serve the **v2 "Amplop" (envelope budgeting)** design only. The v1 weekly/monthly/recap model is dropped.
 
@@ -41,6 +42,7 @@ In the prototype all math runs client-side over `localStorage`. The backend beco
 | D6 | Subscription payments storage? | **As expenses.** Single transactions table; a Langganan expense carries `subscription_id` (the "subcategory"). No payment table, no pay/unpay endpoints. **One payment per subscription per month.** |
 | D7 | Per-month history of budgets/subscriptions? | **Effective-dated rows.** A new version is stored only when something changes, stamped with an effective `(year, month)`. Reads use the latest version with effective month ≤ viewed month. Writes are effective from the **current** month. |
 | D8 | Budget config baseline month? | **Locked at `2025-01`.** A fixed lower bound ≤ any month that will ever be viewed; with no v1 migration nothing earlier exists. Changing it after the migration is applied needs a follow-up migration. |
+| D9 | Leftover from closed weeks/weekends/subscriptions? *(added 2026-07-14)* | **Rolls into Fleksibel.** Past week/weekend pills contribute their `left`; each **paid** subscription contributes `alloc − paid` — both signs. Fleksibel `left = flexBudget + rollover − flexSpent`, with an itemized `rollover_items` breakdown in the API. Planned budgets and `sisa` unchanged. See §6.6. |
 
 ### Carried over from the current repo (assumptions)
 - Go + GCP Functions Framework (`functions-framework-go`); local dev via `cmd/main.go`.
@@ -64,7 +66,7 @@ In the prototype all math runs client-side over `localStorage`. The backend beco
 - AI scan/import (Phase 2 — interface only).
 - Multi-user / auth.
 - v1 data migration.
-- Carry-over between days/weeks — **v2 has none** (`carryIn` is always 0; v1 `carryBefore` dropped).
+- **Day-level** carry-over — none (`carryIn` is always 0; v1 `carryBefore` dropped). *(Amended 2026-07-14: the original "no carry-over at all" decision is superseded by D9 — closed week/weekend/subscription leftover now rolls into Fleksibel, §6.6.)*
 - Future-dating of config changes (writes are effective from the current month only).
 - Effective-dating of subscription **name/color** (cosmetic; only `alloc`/`due_day`/`active` are versioned — see §5).
 
@@ -300,9 +302,10 @@ Inputs: expenses (date, amount, category) **for the read window (§6.2)**, **res
 - `shopBudget = shopWeekly × len(weeks)`, `shopSpent = Σ weeks.spent`.
 - `wkndBudget = weekendBudget × len(weekends)`, `wkndSpent = Σ weekends.spent`.
 - `flexBudget = monthly − shopBudget − wkndBudget − subsAlloc` (may be negative).
+- `rollover` = Σ leftover from **closed** sources (§6.6): past week/weekend pills' `left` + paid subscriptions' `alloc − paid`.
 - `totalSpent = shopSpent + wkndSpent + langgananSpent + flexSpent`.
-- `sisa = monthly − totalSpent`.
-- `rows[4]`: belanja, weekend, **langganan** `{budget=subsAlloc, spent=langgananSpent}`, fleksibel — each `{ id, label, budget, spent, left, over }`.
+- `sisa = monthly − totalSpent` (rollover does **not** change `sisa`).
+- `rows[4]`: belanja, weekend, **langganan** `{budget=subsAlloc, spent=langgananSpent}`, fleksibel — each `{ id, label, budget, spent, left, over }`. Fleksibel only: `left = flexBudget + rollover − flexSpent` and `over = left < 0`; the other rows keep `left = budget − spent`.
 
 `state` (week/weekend pills, port of `weekPillState`): **past** (`sun < today`) → final diff; **current** (`start ≤ today ≤ sun`) → `left`; **future** → `budget`.
 
@@ -311,6 +314,22 @@ For each resolved subscription, derive from this month's single Langganan expens
 
 ### 6.5 Day helpers
 `SpentOf(date)` (Σ all expenses that date), `DayContext(date)` (Friday/weekend/weekday label), `DayMinis(date)` (Terpakai; Sisa belanja if the date's week is in this month; Sisa wknd or Sisa fleksibel).
+
+### 6.6 Rollover into Fleksibel (D9 — added 2026-07-14)
+
+Leftover from **closed** sources rolls into the Fleksibel envelope. A source is closed when its outcome can no longer change:
+
+| Source | Closed when | Contribution (both signs) |
+|--------|-------------|---------------------------|
+| Week pill | `state == past` (its Sunday < today) | `left = shopWeekly − spent` |
+| Weekend pill | `state == past` | `left = weekendBudget − spent` |
+| Subscription | **paid** this month (its single Langganan expense exists — §5/§6.4) | `alloc − paid` (the §6.4 `diff`) |
+
+- `rollover = Σ` contributions. Current/future pills and **unpaid subscriptions contribute nothing** — an unpaid sub's alloc stays fully reserved.
+- Fleksibel: `left = flexBudget + rollover − flexSpent`, `over = left < 0` (a bad week can push Fleksibel over even with modest flex spending — intended). The planned `flexBudget` and `sisa` are **unchanged**: rollover moves money between envelopes' `left`, never changes the month total.
+- The engine also returns the itemized breakdown (`rollover_items`, §7.1) so the Fleksibel detail can show where every add/deduct came from: one item per closed source, **including zero amounts** (complete audit trail). Open sources are absent — absence means "still open".
+- Boundary weeks/weekends roll in the month that **owns** them (Friday/Saturday rule, §6.2), same as their `spent`.
+- Viewing a **past** month: every pill is past and payments are final ⇒ rollover is the month's full week+weekend+subscription leftover. Viewing a **future** month: nothing is closed ⇒ rollover 0. Both fall out of the rules above — no special-casing.
 
 ---
 
@@ -329,7 +348,7 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
     { "id": "belanja",   "label": "Belanja Mingguan", "budget": 2400000, "spent": 980000, "left": 1420000, "over": false },
     { "id": "weekend",   "label": "Akhir Pekan",       "budget": 800000,  "spent": 254000, "left": 546000,  "over": false },
     { "id": "langganan", "label": "Langganan",         "budget": 330000,  "spent": 251000, "left": 79000,   "over": false },
-    { "id": "fleksibel", "label": "Fleksibel",         "budget": 1470000, "spent": 8000,   "left": 1462000, "over": false }
+    { "id": "fleksibel", "label": "Fleksibel",         "budget": 1470000, "spent": 8000,   "left": 1577000, "over": false }
   ],
   "belanja_weeks": [
     { "range": "1–7 Jun", "monday": "2026-06-01", "friday": "2026-06-05", "sunday": "2026-06-07",
@@ -339,7 +358,14 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
     { "range": "6–7 Jun", "saturday": "2026-06-06", "sunday": "2026-06-07",
       "budget": 200000, "spent": 254000, "left": -54000, "state": "past" }
   ],
-  "flex": { "budget": 1470000, "spent": 8000, "left": 1462000 },
+  "flex": {
+    "budget": 1470000, "rollover": 115000, "spent": 8000, "left": 1577000,
+    "rollover_items": [
+      { "type": "week",         "start": "2026-06-01", "end": "2026-06-07", "amount": 168000 },
+      { "type": "weekend",      "start": "2026-06-06", "end": "2026-06-07", "amount": -54000 },
+      { "type": "subscription", "name": "Netflix",                          "amount": 1000 }
+    ]
+  },
   "calendar": [
     { "date": "2026-06-01", "dow": 1, "is_weekend": false, "is_today": false, "spent": 45000 }
   ],
@@ -363,6 +389,8 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
 ```
 
 `days` includes Langganan expenses as ordinary rows (no injection). Each expense carries `date` (the day-group key) and `occurred_at` (RFC3339; see §7.2). `subscriptions[].paid` is derived from this month's Langganan expense linked to each subscription (at most one).
+
+`flex.rollover_items` lists every **closed** rollover source (§6.6) — `week`/`weekend` items carry `start`/`end` dates, `subscription` items carry `name`; the client formats labels (e.g. "Minggu 1–7 Jun"). The fleksibel row in `envelopes` uses the rolled-up `left` (`budget + rollover − spent`).
 
 ### 7.2 Write — expenses (incl. subscription payments)
 - `POST /expenses` `{ date, time?, amount, category, subscription_id?, note? }` → created. `subscription_id` **required iff** `category=="Langganan"` (and must reference an existing subscription); must be null otherwise.
@@ -426,6 +454,12 @@ Each phase ends green (compiles, tests pass). TDD for the engine and the effecti
 
 ### Phase 5 — AI scan import (deferred; see §9)
 
+### Phase 6 — Fleksibel rollover (D9/§6.6 — added 2026-07-14)
+- [ ] Engine: `RolloverItem` type; compute `rollover` + `rollover_items` in `ComputeMonth` (past pills' `left`; paid subs' `alloc − paid`); fleksibel row `left = flexBudget + rollover − flexSpent`, `over = left < 0`.
+- [ ] `month` service/handler: expose `flex.rollover` + `flex.rollover_items` (§7.1).
+- [ ] Engine tests: mid-month mix of past/current/future pills; month start (rollover 0); past-month view (all closed); negative rollover pushing fleksibel `over`; overpaid/underpaid/unpaid subscriptions; boundary week owned by neighbor month; zero-amount items included.
+- [ ] Frontend (separate repo, out of scope here): Fleksibel detail sheet renders the rollover breakdown; envelope card shows the adjusted `left`.
+
 ---
 
 ## 9. Phase 2 (deferred) — AI screenshot import
@@ -441,6 +475,7 @@ Interface sketch only.
 - **Resolution + repos:** integration tests on `devdb` (CockroachDB) for effective-dating semantics and the wide month-window query.
 - **Once-per-month payment:** unit-test the service pre-check (incl. update excluding self, and moving date/subscription into an occupied month) and an integration test asserting the DB unique partial index rejects a duplicate → surfaced as 409.
 - **Services/handlers:** validation + error→status mapping (400/404/409); `TIME` pins "now" (and the current month for writes).
+- **Rollover (§6.6):** engine unit tests per Phase 6 — closing rules (past-only pills, paid-only subs), both signs, breakdown completeness (zero items included, open sources absent), `sisa` unaffected.
 - CI green per phase.
 
 ---
