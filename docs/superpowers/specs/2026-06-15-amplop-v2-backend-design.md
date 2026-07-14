@@ -455,9 +455,9 @@ Each phase ends green (compiles, tests pass). TDD for the engine and the effecti
 ### Phase 5 — AI scan import (deferred; see §9)
 
 ### Phase 6 — Fleksibel rollover (D9/§6.6 — added 2026-07-14)
-- [ ] Engine: `RolloverItem` type; compute `rollover` + `rollover_items` in `ComputeMonth` (past pills' `left`; paid subs' `alloc − paid`); fleksibel row `left = flexBudget + rollover − flexSpent`, `over = left < 0`.
-- [ ] `month` service/handler: expose `flex.rollover` + `flex.rollover_items` (§7.1).
-- [ ] Engine tests: mid-month mix of past/current/future pills; month start (rollover 0); past-month view (all closed); negative rollover pushing fleksibel `over`; overpaid/underpaid/unpaid subscriptions; boundary week owned by neighbor month; zero-amount items included.
+- [x] Engine: `RolloverItem` type; compute `rollover` + `rollover_items` in `ComputeMonth` (past pills' `left`; paid subs' `alloc − paid`); fleksibel row `left = flexBudget + rollover − flexSpent`, `over = left < 0`.
+- [x] `month` service/handler: expose `flex.rollover` + `flex.rollover_items` (§7.1).
+- [x] Engine tests: mid-month mix of past/current/future pills; month start (rollover 0); past-month view (all closed); negative rollover pushing fleksibel `over`; overpaid/underpaid/unpaid subscriptions; boundary week owned by neighbor month; zero-amount items included.
 - [ ] Frontend (separate repo, out of scope here): Fleksibel detail sheet renders the rollover breakdown; envelope card shows the adjusted `left`.
 
 ---
