@@ -164,13 +164,14 @@ func TestComputeMonth_June2026Seed(t *testing.T) {
 		}
 	}
 
-	// rows: belanja, weekend, langganan, fleksibel. Fleksibel's left includes
-	// the rollover (§6.6): 1470000 + 671000 − 38000.
+	// rows: belanja, weekend, langganan, fleksibel. Fleksibel's row carries the
+	// EFFECTIVE budget (flexBudget 1470000 + rollover 671000) so the card's
+	// progress bar agrees with the over flag (§6.6); left = budget − spent.
 	wantRows := []Row{
 		{ID: EnvBelanja, Budget: 2_400_000, Spent: 742_000, Left: 1_658_000, Over: false},
 		{ID: EnvWeekend, Budget: 800_000, Spent: 178_000, Left: 622_000, Over: false},
 		{ID: EnvLangganan, Budget: 330_000, Spent: 251_000, Left: 79_000, Over: false},
-		{ID: EnvFleksibel, Budget: 1_470_000, Spent: 38_000, Left: 2_103_000, Over: false},
+		{ID: EnvFleksibel, Budget: 2_141_000, Spent: 38_000, Left: 2_103_000, Over: false},
 	}
 	if len(got.Rows) != 4 {
 		t.Fatalf("len(Rows) = %d, want 4", len(got.Rows))
@@ -371,7 +372,10 @@ func TestComputeMonth_NegativeRolloverPushesFlexOver(t *testing.T) {
 		t.Errorf("Rollover = %d, want -2400000", got.Rollover)
 	}
 	flex := got.Rows[3]
-	if flex.Left != -600_000 { // 1800000 − 2400000 − 0
+	if flex.Budget != -600_000 { // effective: 1800000 − 2400000
+		t.Errorf("fleksibel effective budget = %d, want -600000", flex.Budget)
+	}
+	if flex.Left != -600_000 { // −600000 − 0 spent
 		t.Errorf("fleksibel left = %d, want -600000", flex.Left)
 	}
 	if !flex.Over {

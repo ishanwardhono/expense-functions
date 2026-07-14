@@ -305,7 +305,7 @@ Inputs: expenses (date, amount, category) **for the read window (§6.2)**, **res
 - `rollover` = Σ leftover from **closed** sources (§6.6): past week/weekend pills' `left` + paid subscriptions' `alloc − paid`.
 - `totalSpent = shopSpent + wkndSpent + langgananSpent + flexSpent`.
 - `sisa = monthly − totalSpent` (rollover does **not** change `sisa`).
-- `rows[4]`: belanja, weekend, **langganan** `{budget=subsAlloc, spent=langgananSpent}`, fleksibel — each `{ id, label, budget, spent, left, over }`. Fleksibel only: `left = flexBudget + rollover − flexSpent` and `over = left < 0`; the other rows keep `left = budget − spent`.
+- `rows[4]`: belanja, weekend, **langganan** `{budget=subsAlloc, spent=langgananSpent}`, fleksibel — each `{ id, label, budget, spent, left, over }` with `left = budget − spent`, `over = spent > budget`. Fleksibel's row `budget` is the **effective** figure `flexBudget + rollover` so the card's progress bar agrees with `over`; the planned `flexBudget` is exposed only via `flex.budget` (the detail-sheet ledger).
 
 `state` (week/weekend pills, port of `weekPillState`): **past** (`sun < today`) → final diff; **current** (`start ≤ today ≤ sun`) → `left`; **future** → `budget`.
 
@@ -327,6 +327,7 @@ Leftover from **closed** sources rolls into the Fleksibel envelope. A source is 
 
 - `rollover = Σ` contributions. Current/future pills and **unpaid subscriptions contribute nothing** — an unpaid sub's alloc stays fully reserved.
 - Fleksibel: `left = flexBudget + rollover − flexSpent`, `over = left < 0` (a bad week can push Fleksibel over even with modest flex spending — intended). The planned `flexBudget` and `sisa` are **unchanged**: rollover moves money between envelopes' `left`, never changes the month total.
+- The fleksibel **envelope row** (card) carries the effective budget `flexBudget + rollover`, so the progress bar and `over` flag tell the same story; the detail-sheet ledger keeps the planned figure (`flex.budget`) with the rollover itemized below it. *(Amended 2026-07-14 after preview review.)*
 - The engine also returns the itemized breakdown (`rollover_items`, §7.1) so the Fleksibel detail can show where every add/deduct came from: one item per closed source, **including zero amounts** (complete audit trail). Open sources are absent — absence means "still open".
 - Boundary weeks/weekends roll in the month that **owns** them (Friday/Saturday rule, §6.2), same as their `spent`.
 - Viewing a **past** month: every pill is past and payments are final ⇒ rollover is the month's full week+weekend+subscription leftover. Viewing a **future** month: nothing is closed ⇒ rollover 0. Both fall out of the rules above — no special-casing.
@@ -348,7 +349,7 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
     { "id": "belanja",   "label": "Belanja Mingguan", "budget": 2400000, "spent": 980000, "left": 1420000, "over": false },
     { "id": "weekend",   "label": "Akhir Pekan",       "budget": 800000,  "spent": 254000, "left": 546000,  "over": false },
     { "id": "langganan", "label": "Langganan",         "budget": 330000,  "spent": 251000, "left": 79000,   "over": false },
-    { "id": "fleksibel", "label": "Fleksibel",         "budget": 1470000, "spent": 8000,   "left": 1577000, "over": false }
+    { "id": "fleksibel", "label": "Fleksibel",         "budget": 1585000, "spent": 8000,   "left": 1577000, "over": false }
   ],
   "belanja_weeks": [
     { "range": "1–7 Jun", "monday": "2026-06-01", "friday": "2026-06-05", "sunday": "2026-06-07",

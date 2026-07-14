@@ -20,7 +20,7 @@ The backend is being **completely rewritten** from the v1 model (`weekly/`, `mon
 - **One routed `Expense` Cloud Function** (method+path router) instead of one function per operation.
 - **Subscription payments are ordinary expenses** (category `Langganan` + `subscription_id`); single transactions table; **at most one payment per subscription per calendar month**.
 - **Budgets + subscriptions are effective-dated**: read the latest version with effective month ≤ viewed month; writes are effective from the **current** month (past months stay frozen).
-- **Fleksibel rollover** (D9, 2026-07-14): leftover from **closed** sources — past week/weekend pills (`left`) and paid subscriptions (`alloc − paid`), both signs — rolls into Fleksibel's `left`, with an itemized `rollover_items` breakdown in `GET /month`. Planned budgets and `sisa` unchanged (spec §6.6).
+- **Fleksibel rollover** (D9, 2026-07-14): leftover from **closed** sources — past week/weekend pills (`left`) and paid subscriptions (`alloc − paid`), both signs — rolls into Fleksibel's `left`, with an itemized `rollover_items` breakdown in `GET /month`. The fleksibel envelope **row** carries the effective budget (`flexBudget + rollover`); the planned figure lives in `flex.budget`. `sisa` unchanged (spec §6.6).
 - AI screenshot import (`/scan`) is **deferred to Phase 2**.
 
 ## Commands
