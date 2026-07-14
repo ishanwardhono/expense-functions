@@ -164,12 +164,13 @@ func TestComputeMonth_June2026Seed(t *testing.T) {
 		}
 	}
 
-	// rows: belanja, weekend, langganan, fleksibel
+	// rows: belanja, weekend, langganan, fleksibel. Fleksibel's left includes
+	// the rollover (§6.6): 1470000 + 671000 − 38000.
 	wantRows := []Row{
 		{ID: EnvBelanja, Budget: 2_400_000, Spent: 742_000, Left: 1_658_000, Over: false},
 		{ID: EnvWeekend, Budget: 800_000, Spent: 178_000, Left: 622_000, Over: false},
 		{ID: EnvLangganan, Budget: 330_000, Spent: 251_000, Left: 79_000, Over: false},
-		{ID: EnvFleksibel, Budget: 1_470_000, Spent: 38_000, Left: 1_432_000, Over: false},
+		{ID: EnvFleksibel, Budget: 1_470_000, Spent: 38_000, Left: 2_103_000, Over: false},
 	}
 	if len(got.Rows) != 4 {
 		t.Fatalf("len(Rows) = %d, want 4", len(got.Rows))
@@ -272,6 +273,140 @@ func TestComputeMonth_EmptyMonth(t *testing.T) {
 	}
 	if got.Sisa != 5_000_000 {
 		t.Errorf("Sisa = %d, want 5000000", got.Sisa)
+	}
+}
+
+// ---- Rollover into Fleksibel (§6.6) ---------------------------------------
+
+func TestComputeMonth_RolloverJune2026Seed(t *testing.T) {
+	// Mid-month (today Jun 16): closed sources are weeks 1–2, weekends 1–2, and
+	// the two paid subscriptions (Netflix +1000, Spotify 55000−65000 = −10000).
+	got := ComputeMonth(MonthInput{
+		Year: 2026, Month: 6,
+		Today:         d(2026, 6, 16),
+		Config:        seedConfig(),
+		Subscriptions: seedSubs(),
+		Expenses:      seedExpenses(),
+	})
+
+	// 48000 + 410000 (weeks) + 22000 + 200000 (weekends) + 1000 − 10000 (subs).
+	if got.Rollover != 671_000 {
+		t.Errorf("Rollover = %d, want 671000", got.Rollover)
+	}
+
+	want := []RolloverItem{
+		{Type: RolloverWeek, Start: d(2026, 6, 1), End: d(2026, 6, 7), Amount: 48_000},
+		{Type: RolloverWeek, Start: d(2026, 6, 8), End: d(2026, 6, 14), Amount: 410_000},
+		{Type: RolloverWeekend, Start: d(2026, 6, 6), End: d(2026, 6, 7), Amount: 22_000},
+		{Type: RolloverWeekend, Start: d(2026, 6, 13), End: d(2026, 6, 14), Amount: 200_000},
+		{Type: RolloverSubscription, Name: "Netflix", Amount: 1_000},
+		{Type: RolloverSubscription, Name: "Spotify", Amount: -10_000},
+	}
+	if len(got.RolloverItems) != len(want) {
+		t.Fatalf("len(RolloverItems) = %d, want %d (unpaid subs must be absent)", len(got.RolloverItems), len(want))
+	}
+	for i, it := range got.RolloverItems {
+		w := want[i]
+		if it.Type != w.Type || it.Amount != w.Amount || it.Name != w.Name {
+			t.Errorf("item %d = %+v, want type=%s name=%q amount=%d", i, it, w.Type, w.Name, w.Amount)
+		}
+		if w.Type != RolloverSubscription && (!timeutil.SameDate(it.Start, w.Start) || !timeutil.SameDate(it.End, w.End)) {
+			t.Errorf("item %d range = %s..%s, want %s..%s",
+				i, it.Start.Format("2006-01-02"), it.End.Format("2006-01-02"),
+				w.Start.Format("2006-01-02"), w.End.Format("2006-01-02"))
+		}
+	}
+
+	// Rollover must not change sisa (already asserted in the seed test) and the
+	// planned flex budget stays untouched.
+	if got.FlexBudget != 1_470_000 {
+		t.Errorf("FlexBudget = %d, want 1470000 (rollover must not change the plan)", got.FlexBudget)
+	}
+}
+
+func TestComputeMonth_RolloverMonthStart(t *testing.T) {
+	// On the month's first day nothing is closed: no past pills, no paid subs.
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 1), Config: seedConfig()})
+	if got.Rollover != 0 {
+		t.Errorf("Rollover = %d, want 0", got.Rollover)
+	}
+	if len(got.RolloverItems) != 0 {
+		t.Errorf("len(RolloverItems) = %d, want 0", len(got.RolloverItems))
+	}
+	// flexBudget = 5M − 2.4M − 0.8M (no subs) = 1.8M; left is untouched.
+	if got.Rows[3].Left != 1_800_000 {
+		t.Errorf("fleksibel left = %d, want 1800000", got.Rows[3].Left)
+	}
+}
+
+func TestComputeMonth_RolloverPastMonthView(t *testing.T) {
+	// Viewing June from July: every pill is past and payments are final, so the
+	// rollover is the month's full week+weekend+subscription leftover.
+	got := ComputeMonth(MonthInput{
+		Year: 2026, Month: 6,
+		Today:         d(2026, 7, 20),
+		Config:        seedConfig(),
+		Subscriptions: seedSubs(),
+		Expenses:      seedExpenses(),
+	})
+	// weeks 1658000 + weekends 622000 + subs (1000 − 10000).
+	if got.Rollover != 2_271_000 {
+		t.Errorf("Rollover = %d, want 2271000", got.Rollover)
+	}
+	if len(got.RolloverItems) != 10 { // 4 weeks + 4 weekends + 2 paid subs
+		t.Errorf("len(RolloverItems) = %d, want 10", len(got.RolloverItems))
+	}
+	if got.Rows[3].Left != 3_703_000 { // 1470000 + 2271000 − 38000
+		t.Errorf("fleksibel left = %d, want 3703000", got.Rows[3].Left)
+	}
+}
+
+func TestComputeMonth_NegativeRolloverPushesFlexOver(t *testing.T) {
+	// A heavily overspent past week drags fleksibel below zero even though
+	// nothing was spent from fleksibel itself.
+	exp := []Expense{{Date: d(2026, 6, 3), Amount: 4_000_000, Category: CatBelanja}}
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	// week1 −3.4M + week2 600K + weekends 2×200K = −2.4M.
+	if got.Rollover != -2_400_000 {
+		t.Errorf("Rollover = %d, want -2400000", got.Rollover)
+	}
+	flex := got.Rows[3]
+	if flex.Left != -600_000 { // 1800000 − 2400000 − 0
+		t.Errorf("fleksibel left = %d, want -600000", flex.Left)
+	}
+	if !flex.Over {
+		t.Error("fleksibel over = false, want true (negative rolled-up left)")
+	}
+}
+
+func TestComputeMonth_RolloverIncludesZeroAmountItems(t *testing.T) {
+	// A past week closed exactly on budget still appears in the breakdown.
+	exp := []Expense{{Date: d(2026, 6, 3), Amount: 600_000, Category: CatBelanja}}
+	got := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 6, 16), Config: seedConfig(), Expenses: exp})
+	if len(got.RolloverItems) != 4 { // weeks 1–2 + weekends 1–2
+		t.Fatalf("len(RolloverItems) = %d, want 4", len(got.RolloverItems))
+	}
+	if got.RolloverItems[0].Amount != 0 {
+		t.Errorf("week1 item amount = %d, want 0 (zero items are part of the audit trail)", got.RolloverItems[0].Amount)
+	}
+}
+
+func TestComputeMonth_RolloverFollowsWeekOwnership(t *testing.T) {
+	// A boundary week's leftover rolls in the month that OWNS the week (its
+	// Friday), same as its spent. Jun 29 belongs to July's first week.
+	exp := []Expense{{Date: d(2026, 6, 29), Amount: 100_000, Category: CatBelanja}}
+
+	july := ComputeMonth(MonthInput{Year: 2026, Month: 7, Today: d(2026, 8, 5), Config: seedConfig(), Expenses: exp})
+	first := july.RolloverItems[0]
+	if first.Type != RolloverWeek || !timeutil.SameDate(first.Start, d(2026, 6, 29)) || first.Amount != 500_000 {
+		t.Errorf("July first rollover item = %+v, want week starting 2026-06-29 with amount 500000", first)
+	}
+
+	june := ComputeMonth(MonthInput{Year: 2026, Month: 6, Today: d(2026, 8, 5), Config: seedConfig(), Expenses: exp})
+	// June's rollover is untouched by the Jun-29 expense: 4 full weeks + 4 full
+	// weekends = 2.4M + 0.8M.
+	if june.Rollover != 3_200_000 {
+		t.Errorf("June Rollover = %d, want 3200000 (Jun-29 belongs to July's week)", june.Rollover)
 	}
 }
 
