@@ -121,6 +121,74 @@ func TestDashboard_Assembly(t *testing.T) {
 	}
 }
 
+func TestDashboard_FlexRollover(t *testing.T) {
+	// Clock on Tue Jun 23 2026: weeks 1–3 and weekends 1–3 are past; the one
+	// subscription is paid (alloc 187000, paid 186000 → +1000).
+	subID := uuid.New()
+	cfg := budget.Config{Monthly: 5_000_000, ShopWeekly: 600_000, WeekendBudget: 200_000}
+	subs := []subscription.Resolved{{ID: subID, Name: "Netflix", Color: "#c8403c", Alloc: 187_000, DueDay: 5}}
+	exps := []expense.Expense{
+		exp(timeutil.Date(2026, 6, 15), 18_000, "Makan", nil),        // week 3 belanja
+		exp(timeutil.Date(2026, 6, 5), 186_000, "Langganan", &subID), // paid sub
+		exp(timeutil.Date(2026, 6, 16), 8_000, "Lainnya", nil),       // fleksibel
+	}
+
+	svc := NewService(fakeBudget{cfg}, fakeSubs{subs}, fakeExpenses{exps}, fixedClock(2026, 6, 23))
+	dash, err := svc.Dashboard(context.Background(), 2026, 6)
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+
+	// weeks 600000+600000+582000 + weekends 3×200000 + sub 1000.
+	if dash.Flex.Rollover != 2_383_000 {
+		t.Errorf("flex.rollover: got %d, want 2383000", dash.Flex.Rollover)
+	}
+	// flexBudget = 5M − 2.4M − 0.8M − 187000 = 1613000; left = budget + rollover − spent.
+	if dash.Flex.Budget != 1_613_000 {
+		t.Errorf("flex.budget: got %d, want 1613000", dash.Flex.Budget)
+	}
+	if dash.Flex.Left != 3_988_000 {
+		t.Errorf("flex.left: got %d, want 3988000", dash.Flex.Left)
+	}
+
+	items := dash.Flex.RolloverItems
+	if len(items) != 7 { // 3 weeks + 3 weekends + 1 paid sub
+		t.Fatalf("len(rollover_items) = %d, want 7", len(items))
+	}
+	first := items[0]
+	if first.Type != "week" || first.Start != "2026-06-01" || first.End != "2026-06-07" || first.Amount != 600_000 || first.Name != "" {
+		t.Errorf("first item = %+v, want week 2026-06-01..2026-06-07 amount 600000 without name", first)
+	}
+	sub := items[6]
+	if sub.Type != "subscription" || sub.Name != "Netflix" || sub.Amount != 1_000 || sub.Start != "" || sub.End != "" {
+		t.Errorf("sub item = %+v, want subscription Netflix amount 1000 without dates", sub)
+	}
+
+	// The fleksibel envelope row carries the same rolled-up left.
+	for _, r := range dash.Envelopes {
+		if r.ID == "fleksibel" && r.Left != 3_988_000 {
+			t.Errorf("fleksibel row left: got %d, want 3988000", r.Left)
+		}
+	}
+}
+
+func TestDashboard_FlexRolloverEmptyIsNotNull(t *testing.T) {
+	// Month start: nothing closed. rollover_items must serialize as [] (the
+	// client guards on the array), never null.
+	cfg := budget.Config{Monthly: 5_000_000, ShopWeekly: 600_000, WeekendBudget: 200_000}
+	svc := NewService(fakeBudget{cfg}, fakeSubs{}, fakeExpenses{}, fixedClock(2026, 6, 1))
+	dash, err := svc.Dashboard(context.Background(), 2026, 6)
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if dash.Flex.Rollover != 0 {
+		t.Errorf("flex.rollover: got %d, want 0", dash.Flex.Rollover)
+	}
+	if dash.Flex.RolloverItems == nil || len(dash.Flex.RolloverItems) != 0 {
+		t.Errorf("rollover_items: got %#v, want empty non-nil slice", dash.Flex.RolloverItems)
+	}
+}
+
 func TestDashboard_RangeLabels(t *testing.T) {
 	cfg := budget.Config{Monthly: 5_000_000, ShopWeekly: 600_000, WeekendBudget: 200_000}
 	svc := NewService(fakeBudget{cfg}, fakeSubs{}, fakeExpenses{}, fixedClock(2026, 6, 23))

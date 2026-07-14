@@ -66,11 +66,24 @@ type WeekendDTO struct {
 	State    string `json:"state"`
 }
 
-// Flex is the flexible-envelope summary.
+// Flex is the flexible-envelope summary. Rollover is the §6.6 sum of closed
+// sources' leftover; Left = Budget + Rollover − Spent.
 type Flex struct {
-	Budget int64 `json:"budget"`
-	Spent  int64 `json:"spent"`
-	Left   int64 `json:"left"`
+	Budget        int64             `json:"budget"`
+	Rollover      int64             `json:"rollover"`
+	Spent         int64             `json:"spent"`
+	Left          int64             `json:"left"`
+	RolloverItems []RolloverItemDTO `json:"rollover_items"`
+}
+
+// RolloverItemDTO is one closed rollover source (spec §7.1): week/weekend
+// items carry start/end dates, subscription items carry the name.
+type RolloverItemDTO struct {
+	Type   string `json:"type"` // week | weekend | subscription
+	Start  string `json:"start,omitempty"`
+	End    string `json:"end,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Amount int64  `json:"amount"`
 }
 
 // CalendarDay is one cell of the month calendar grid.
