@@ -249,12 +249,14 @@ func ComputeMonth(in MonthInput) MonthResult {
 		rolloverItems = append(rolloverItems, RolloverItem{Type: RolloverSubscription, Name: s.Name, Amount: st.Diff})
 	}
 
-	flexLeft := flexBudget + rollover - flexSpent
+	// The fleksibel row carries the EFFECTIVE budget (planned + rollover) so
+	// the envelope card's progress bar agrees with the over flag; the planned
+	// figure stays in FlexBudget / the flex ledger (§6.6).
 	rows := []Row{
 		makeRow(EnvBelanja, shopBudget, shopSpent),
 		makeRow(EnvWeekend, wkndBudget, wkndSpent),
 		makeRow(EnvLangganan, subsAlloc, langgananSpent),
-		{ID: EnvFleksibel, Label: EnvFleksibel.Label(), Budget: flexBudget, Spent: flexSpent, Left: flexLeft, Over: flexLeft < 0},
+		makeRow(EnvFleksibel, flexBudget+rollover, flexSpent),
 	}
 
 	return MonthResult{

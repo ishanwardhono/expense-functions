@@ -164,10 +164,16 @@ func TestDashboard_FlexRollover(t *testing.T) {
 		t.Errorf("sub item = %+v, want subscription Netflix amount 1000 without dates", sub)
 	}
 
-	// The fleksibel envelope row carries the same rolled-up left.
+	// The fleksibel envelope row carries the EFFECTIVE budget (planned +
+	// rollover) so the card's progress bar is honest, and the rolled-up left.
 	for _, r := range dash.Envelopes {
-		if r.ID == "fleksibel" && r.Left != 3_988_000 {
-			t.Errorf("fleksibel row left: got %d, want 3988000", r.Left)
+		if r.ID == "fleksibel" {
+			if r.Budget != 3_996_000 { // 1613000 + 2383000
+				t.Errorf("fleksibel row budget: got %d, want 3996000", r.Budget)
+			}
+			if r.Left != 3_988_000 {
+				t.Errorf("fleksibel row left: got %d, want 3988000", r.Left)
+			}
 		}
 	}
 }
