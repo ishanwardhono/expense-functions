@@ -167,19 +167,23 @@ func (s *Service) Dashboard(ctx context.Context, year, month int) (Dashboard, er
 	return dash, nil
 }
 
-// rolloverItems maps engine rollover items to their §7.1 DTOs. It always
-// returns a non-nil slice so the payload serializes as [] rather than null.
+// rolloverItems groups the engine's per-source rollover items into one summed
+// DTO per type (week, weekend, subscription — §7.1), skipping types with no
+// closed source. It always returns a non-nil slice so the payload serializes
+// as [] rather than null.
 func rolloverItems(items []envelope.RolloverItem) []RolloverItemDTO {
-	dtos := make([]RolloverItemDTO, 0, len(items))
+	sums := map[envelope.RolloverType]int64{}
+	counts := map[envelope.RolloverType]int{}
 	for _, it := range items {
-		dto := RolloverItemDTO{Type: string(it.Type), Amount: it.Amount}
-		if it.Type == envelope.RolloverSubscription {
-			dto.Name = it.Name
-		} else {
-			dto.Start = ymd(it.Start)
-			dto.End = ymd(it.End)
+		sums[it.Type] += it.Amount
+		counts[it.Type]++
+	}
+	dtos := make([]RolloverItemDTO, 0, 3)
+	for _, t := range []envelope.RolloverType{envelope.RolloverWeek, envelope.RolloverWeekend, envelope.RolloverSubscription} {
+		if counts[t] == 0 {
+			continue
 		}
-		dtos = append(dtos, dto)
+		dtos = append(dtos, RolloverItemDTO{Type: string(t), Amount: sums[t]})
 	}
 	return dtos
 }

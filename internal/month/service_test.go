@@ -151,17 +151,20 @@ func TestDashboard_FlexRollover(t *testing.T) {
 		t.Errorf("flex.left: got %d, want 3988000", dash.Flex.Left)
 	}
 
+	// Items are grouped by type: one summed row per type with ≥1 closed source.
+	want := []RolloverItemDTO{
+		{Type: "week", Amount: 1_782_000},     // 600000 + 600000 + 582000
+		{Type: "weekend", Amount: 600_000},    // 3 × 200000
+		{Type: "subscription", Amount: 1_000}, // Netflix 187000 − 186000
+	}
 	items := dash.Flex.RolloverItems
-	if len(items) != 7 { // 3 weeks + 3 weekends + 1 paid sub
-		t.Fatalf("len(rollover_items) = %d, want 7", len(items))
+	if len(items) != len(want) {
+		t.Fatalf("len(rollover_items) = %d, want %d", len(items), len(want))
 	}
-	first := items[0]
-	if first.Type != "week" || first.Start != "2026-06-01" || first.End != "2026-06-07" || first.Amount != 600_000 || first.Name != "" {
-		t.Errorf("first item = %+v, want week 2026-06-01..2026-06-07 amount 600000 without name", first)
-	}
-	sub := items[6]
-	if sub.Type != "subscription" || sub.Name != "Netflix" || sub.Amount != 1_000 || sub.Start != "" || sub.End != "" {
-		t.Errorf("sub item = %+v, want subscription Netflix amount 1000 without dates", sub)
+	for i, it := range items {
+		if it != want[i] {
+			t.Errorf("item %d = %+v, want %+v", i, it, want[i])
+		}
 	}
 
 	// The fleksibel envelope row carries the EFFECTIVE budget (planned +

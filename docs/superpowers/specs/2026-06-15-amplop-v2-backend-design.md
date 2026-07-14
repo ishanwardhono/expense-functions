@@ -328,7 +328,7 @@ Leftover from **closed** sources rolls into the Fleksibel envelope. A source is 
 - `rollover = Σ` contributions. Current/future pills and **unpaid subscriptions contribute nothing** — an unpaid sub's alloc stays fully reserved.
 - Fleksibel: `left = flexBudget + rollover − flexSpent`, `over = left < 0` (a bad week can push Fleksibel over even with modest flex spending — intended). The planned `flexBudget` and `sisa` are **unchanged**: rollover moves money between envelopes' `left`, never changes the month total.
 - The fleksibel **envelope row** (card) carries the effective budget `flexBudget + rollover`, so the progress bar and `over` flag tell the same story; the detail-sheet ledger keeps the planned figure (`flex.budget`) with the rollover itemized below it. *(Amended 2026-07-14 after preview review.)*
-- The engine also returns the itemized breakdown (`rollover_items`, §7.1) so the Fleksibel detail can show where every add/deduct came from: one item per closed source, **including zero amounts** (complete audit trail). Open sources are absent — absence means "still open".
+- The engine returns the per-source breakdown (`RolloverItems`, including zero amounts; open sources absent). The **API groups it by type** (`rollover_items`, §7.1): one summed row per type — week, weekend, subscription — omitting types with no closed source, so the Fleksibel detail shows "Mingguan / Akhir pekan / Langganan" totals. *(Amended 2026-07-14: per-source items dropped from the payload in favor of type sums.)*
 - Boundary weeks/weekends roll in the month that **owns** them (Friday/Saturday rule, §6.2), same as their `spent`.
 - Viewing a **past** month: every pill is past and payments are final ⇒ rollover is the month's full week+weekend+subscription leftover. Viewing a **future** month: nothing is closed ⇒ rollover 0. Both fall out of the rules above — no special-casing.
 
@@ -362,9 +362,9 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
   "flex": {
     "budget": 1470000, "rollover": 115000, "spent": 8000, "left": 1577000,
     "rollover_items": [
-      { "type": "week",         "start": "2026-06-01", "end": "2026-06-07", "amount": 168000 },
-      { "type": "weekend",      "start": "2026-06-06", "end": "2026-06-07", "amount": -54000 },
-      { "type": "subscription", "name": "Netflix",                          "amount": 1000 }
+      { "type": "week",         "amount": 168000 },
+      { "type": "weekend",      "amount": -54000 },
+      { "type": "subscription", "amount": 1000 }
     ]
   },
   "calendar": [
@@ -391,7 +391,7 @@ One routed function. JSON in/out. Errors: non-2xx with `{"error":"message"}` per
 
 `days` includes Langganan expenses as ordinary rows (no injection). Each expense carries `date` (the day-group key) and `occurred_at` (RFC3339; see §7.2). `subscriptions[].paid` is derived from this month's Langganan expense linked to each subscription (at most one).
 
-`flex.rollover_items` lists every **closed** rollover source (§6.6) — `week`/`weekend` items carry `start`/`end` dates, `subscription` items carry `name`; the client formats labels (e.g. "Minggu 1–7 Jun"). The fleksibel row in `envelopes` uses the rolled-up `left` (`budget + rollover − spent`).
+`flex.rollover_items` is the rollover **grouped by type** (§6.6): one summed row per type with ≥1 closed source, ordered week → weekend → subscription; the client maps types to labels ("Mingguan" / "Akhir pekan" / "Langganan"). The fleksibel row in `envelopes` carries the effective budget and rolled-up `left`.
 
 ### 7.2 Write — expenses (incl. subscription payments)
 - `POST /expenses` `{ date, time?, amount, category, subscription_id?, note? }` → created. `subscription_id` **required iff** `category=="Langganan"` (and must reference an existing subscription); must be null otherwise.
