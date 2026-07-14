@@ -61,6 +61,26 @@ type Weekend struct {
 	State    State
 }
 
+// RolloverType identifies the kind of closed source behind a RolloverItem.
+type RolloverType string
+
+const (
+	RolloverWeek         RolloverType = "week"
+	RolloverWeekend      RolloverType = "weekend"
+	RolloverSubscription RolloverType = "subscription"
+)
+
+// RolloverItem is one closed source's contribution to the fleksibel rollover
+// (spec §6.6). Week/weekend items carry Start/End; subscription items carry
+// Name. Zero amounts are kept — the breakdown is a complete audit trail.
+type RolloverItem struct {
+	Type   RolloverType
+	Start  time.Time
+	End    time.Time
+	Name   string
+	Amount int64
+}
+
 // Row is one envelope summary row.
 type Row struct {
 	ID     EnvelopeID
@@ -91,6 +111,12 @@ type MonthResult struct {
 	SubsAlloc      int64
 	LanggananSpent int64
 	FlexSpent      int64
+
+	// Rollover (§6.6): Σ leftover of closed sources — past week/weekend pills
+	// and paid subscriptions (alloc − paid) — both signs. It raises/lowers the
+	// fleksibel row's Left only; FlexBudget and Sisa are untouched.
+	Rollover      int64
+	RolloverItems []RolloverItem
 
 	ShopBudget int64
 	ShopSpent  int64
@@ -196,11 +222,39 @@ func ComputeMonth(in MonthInput) MonthResult {
 	flexBudget := cfg.Monthly - shopBudget - wkndBudget - subsAlloc
 	totalSpent := shopSpent + wkndSpent + langgananSpent + flexSpent
 
+	// Rollover (§6.6): closed sources flush their leftover into fleksibel.
+	// Current/future pills and unpaid subscriptions contribute nothing.
+	var rollover int64
+	var rolloverItems []RolloverItem
+	for _, w := range weeks {
+		if w.State != StatePast {
+			continue
+		}
+		rollover += w.Left
+		rolloverItems = append(rolloverItems, RolloverItem{Type: RolloverWeek, Start: w.Monday, End: w.Sunday, Amount: w.Left})
+	}
+	for _, w := range weekends {
+		if w.State != StatePast {
+			continue
+		}
+		rollover += w.Left
+		rolloverItems = append(rolloverItems, RolloverItem{Type: RolloverWeekend, Start: w.Saturday, End: w.Sunday, Amount: w.Left})
+	}
+	for _, s := range in.Subscriptions {
+		st := SubscriptionStatus(s, in.Expenses, in.Year, in.Month)
+		if !st.Paid {
+			continue
+		}
+		rollover += st.Diff
+		rolloverItems = append(rolloverItems, RolloverItem{Type: RolloverSubscription, Name: s.Name, Amount: st.Diff})
+	}
+
+	flexLeft := flexBudget + rollover - flexSpent
 	rows := []Row{
 		makeRow(EnvBelanja, shopBudget, shopSpent),
 		makeRow(EnvWeekend, wkndBudget, wkndSpent),
 		makeRow(EnvLangganan, subsAlloc, langgananSpent),
-		makeRow(EnvFleksibel, flexBudget, flexSpent),
+		{ID: EnvFleksibel, Label: EnvFleksibel.Label(), Budget: flexBudget, Spent: flexSpent, Left: flexLeft, Over: flexLeft < 0},
 	}
 
 	return MonthResult{
@@ -209,6 +263,8 @@ func ComputeMonth(in MonthInput) MonthResult {
 		SubsAlloc:      subsAlloc,
 		LanggananSpent: langgananSpent,
 		FlexSpent:      flexSpent,
+		Rollover:       rollover,
+		RolloverItems:  rolloverItems,
 		ShopBudget:     shopBudget,
 		ShopSpent:      shopSpent,
 		WkndBudget:     wkndBudget,

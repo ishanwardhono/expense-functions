@@ -98,8 +98,14 @@ func (s *Service) Dashboard(ctx context.Context, year, month int) (Dashboard, er
 			IsCurrent: year == curY && month == curM,
 		},
 		Stats: Stats{Spent: result.TotalSpent, Budget: cfg.Monthly, Remaining: result.Sisa},
-		Flex:  Flex{Budget: result.FlexBudget, Spent: result.FlexSpent, Left: result.FlexBudget - result.FlexSpent},
-		Days:  map[string][]expense.Response{},
+		Flex: Flex{
+			Budget:        result.FlexBudget,
+			Rollover:      result.Rollover,
+			Spent:         result.FlexSpent,
+			Left:          result.FlexBudget + result.Rollover - result.FlexSpent,
+			RolloverItems: rolloverItems(result.RolloverItems),
+		},
+		Days: map[string][]expense.Response{},
 	}
 
 	for _, row := range result.Rows {
@@ -159,6 +165,23 @@ func (s *Service) Dashboard(ctx context.Context, year, month int) (Dashboard, er
 	}
 
 	return dash, nil
+}
+
+// rolloverItems maps engine rollover items to their §7.1 DTOs. It always
+// returns a non-nil slice so the payload serializes as [] rather than null.
+func rolloverItems(items []envelope.RolloverItem) []RolloverItemDTO {
+	dtos := make([]RolloverItemDTO, 0, len(items))
+	for _, it := range items {
+		dto := RolloverItemDTO{Type: string(it.Type), Amount: it.Amount}
+		if it.Type == envelope.RolloverSubscription {
+			dto.Name = it.Name
+		} else {
+			dto.Start = ymd(it.Start)
+			dto.End = ymd(it.End)
+		}
+		dtos = append(dtos, dto)
+	}
+	return dtos
 }
 
 // ymd formats a date as YYYY-MM-DD in Asia/Jakarta.
