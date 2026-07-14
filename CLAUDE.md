@@ -20,6 +20,7 @@ The backend is being **completely rewritten** from the v1 model (`weekly/`, `mon
 - **One routed `Expense` Cloud Function** (method+path router) instead of one function per operation.
 - **Subscription payments are ordinary expenses** (category `Langganan` + `subscription_id`); single transactions table; **at most one payment per subscription per calendar month**.
 - **Budgets + subscriptions are effective-dated**: read the latest version with effective month ≤ viewed month; writes are effective from the **current** month (past months stay frozen).
+- **Fleksibel rollover** (D9, 2026-07-14): leftover from **closed** sources — past week/weekend pills (`left`) and paid subscriptions (`alloc − paid`), both signs — rolls into Fleksibel's `left`, with an itemized `rollover_items` breakdown in `GET /month`. Planned budgets and `sisa` unchanged (spec §6.6).
 - AI screenshot import (`/scan`) is **deferred to Phase 2**.
 
 ## Commands
@@ -68,7 +69,7 @@ migrations/            0001_init_amplop.sql
 Key cross-cutting domain rules (full detail in the spec — these require reading several prototype files to grasp, so they are summarized here):
 
 - **Four envelopes, derived (not stored)** from an expense's category + day-of-week: `belanja` (Belanja/Cash any day; Makan/Jajan on weekdays), `weekend` (Makan/Jajan on Sat–Sun), `fleksibel` (Lainnya any day), `langganan` (category Langganan). See `EnvelopeOf` (spec §6.1).
-- **Month boundaries:** a shopping week (Mon–Sun) belongs to the month of its **Friday**; a weekend (Sat+Sun) to the month of its **Saturday**. A transaction can show in month *M*'s calendar yet count toward a neighbor month's envelope (spec §6.2). No carry-over between days/weeks.
+- **Month boundaries:** a shopping week (Mon–Sun) belongs to the month of its **Friday**; a weekend (Sat+Sun) to the month of its **Saturday**. A transaction can show in month *M*'s calendar yet count toward a neighbor month's envelope (spec §6.2). No day-level carry-over; closed week/weekend/subscription leftover rolls into Fleksibel (spec §6.6).
 - **Effective-date resolution** (spec §5.1/§5.2): the engine stays pure by receiving the *resolved* config + subscription set; versioning logic lives in the repo/service.
 
 The `internal/envelope` engine knows nothing about HTTP, the DB, or versioning — keep it that way.
