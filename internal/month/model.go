@@ -76,13 +76,10 @@ type Flex struct {
 	RolloverItems []RolloverItemDTO `json:"rollover_items"`
 }
 
-// RolloverItemDTO is one closed rollover source (spec §7.1): week/weekend
-// items carry start/end dates, subscription items carry the name.
+// RolloverItemDTO is one rollover group (spec §7.1): the summed contribution
+// of every closed source of a type. Types with no closed source are omitted.
 type RolloverItemDTO struct {
 	Type   string `json:"type"` // week | weekend | subscription
-	Start  string `json:"start,omitempty"`
-	End    string `json:"end,omitempty"`
-	Name   string `json:"name,omitempty"`
 	Amount int64  `json:"amount"`
 }
 
